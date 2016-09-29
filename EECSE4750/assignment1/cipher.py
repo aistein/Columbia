@@ -28,14 +28,15 @@ import pyopencl as cl
 from pyopencl import array
 
 # Imports for PyCUDA
-import pycuda.driver as cuda
-import pycuda.autoinit
-from pycuda.compiler import SourceModule
+# import pycuda.driver as cuda
+# import pycuda.autoinit
+# from pycuda.compiler import SourceModule
 
 # General Imports
-import numpy
+import numpy as np
 import sys
 import string
+import math
 
 #########################################################################################################################
 # CONFIGURATIONS
@@ -52,41 +53,20 @@ class CaseException(Exception):
 # Function Definitions
 #########################################################################################################################
 
-def atbashInit(plaintext = "ABCDEFGHIJKLMNOPQRSTUVWXYZ", size=26):
-
-	'''initiates the atbash cipher mapping into returned 2x26 Matrix'''
-
-	# Reverse the alphabet into a new array (can be done with any alphabet)
-	ciphertext = ""
-	for letter in plaintext:
-		ciphertext = letter + ciphertext
-
-	# Map the arrays together
-	ciphermap = plaintext + ciphertext
-
-	print ciphermap
-	return ciphermap
-
-
-def atbashEncodePY(inputStr, cipher):
+def atbashEncodePY(input_string):
 
 	'''applies cipher to an input string'''
 
 	# map the input to output using the cipher
 	output = ""
 
-	for letter in inputStr:
-		try:
-			if not str.isupper(letter):
-				raise CaseException, inputStr
-			else:
-				idx = cipher.index(letter)
-				print idx
-				output += cipher[len(cipher)/2 + idx]
-		except CaseException, inputStr:
-			print "-E- Input contains lower-case letters: %s\n", inputStr
+	for idx, val in enumerate(input_string):
+		ascii = ord(val)
+		output += chr(ascii + 25 - 2 * (ascii - 65))
 
-	return output
+	print "PY output: ", output
+
+	return
 
 
 def atbashEncodeOCL(input_string):
@@ -105,7 +85,9 @@ def atbashEncodeOCL(input_string):
 		{
 			// This input will be a 1-D array, so we only need a single ID to work with it
 
-				int gid = get_global_id(0);
+				int gid_x = get_global_id(0);
+				int gdim_x = get_global_size(0);
+				int gid_y = get_global_id(1);
 
 			// ATBASH Encoding can be easily accomplished with some simple ASCII Algebra
 			// A = 65, Z = 90, A-Z = 25, B-Y = 23, C-X = 21 ... ASCII(OUT) = ASCII(IN) + 25 - (2 * (ASCII(IN) - 65))
@@ -114,9 +96,9 @@ def atbashEncodeOCL(input_string):
 
 				// total avaialbe threads may be more than needed
 
-				if (gid <= len){
-					ASCII_VALUE = (float) inputString[gid];
-					outputString[gid] = ASCII_VALUE + 25.0 - 2 * (ASCII_VALUE - 65.0);
+				if ((gdim_x * gid_y + gid_x) < len){
+					ASCII_VALUE = (int) inputString[gdim_x * gid_y + gid_x];
+					outputString[gdim_x * gid_y + gid_x] = ASCII_VALUE + 25 - 2 * (ASCII_VALUE - 65);
 				}// end if
 
 		}// end kernel
@@ -127,53 +109,88 @@ def atbashEncodeOCL(input_string):
 
 	# 6. Allocate device memory and move input data from the host to the device memory.
 	mem_flags = cl.mem_flags
-	size = numpy.float32(len(input_string))
-	len_buf = cl.Buffer(context, mem_flags.READ_ONLY | mem_flags.COPY_HOST_PTR, hostbuf=size)
-	inputString_buf = cl.Buffer(context, mem_flags.READ_ONLY | mem_flags.COPY_HOST_PTR, hostbuf=input_string)
-	output_string = numpy.empty_like(input_string)
-	outputString_buf = cl.Buffer(context, mem_flags.WRITE_ONLY, sys.getsizeof(output_string))
+	size = np.float32(len(input_string))
+	max_size = 64
+	if (size <= max_size):
+		len_buf = cl.Buffer(context, mem_flags.READ_ONLY | mem_flags.COPY_HOST_PTR, hostbuf=size)
+		inputString_buf = cl.Buffer(context, mem_flags.READ_ONLY | mem_flags.COPY_HOST_PTR, hostbuf=input_string)
+		output_string = np.empty_like(input_string)
+		outputString_buf = cl.Buffer(context, mem_flags.WRITE_ONLY, sys.getsizeof(output_string))
 
-	# 7. Map buffers to kernel arguments and deploy the kernel, with specified local and global dimensions
-	global_dim = (len(input_string) + (len(input_string) % 2),)
-	local_dim = (2,)
-	program.apply_cipher(queue, global_dim, local_dim, inputString_buf, len_buf, outputString_buf)
+		# 7. Map buffers to kernel arguments and deploy the kernel, with specified local and global dimensions
+		global_dim = (len(input_string),) if (len(input_string) <= 16) else (16, int(math.ceil(len(input_string)/16.0)))
+		local_dim = None if (len(input_string) < 16) else (4,int(math.ceil(len(input_string)/16.0))/2)
+		program.apply_cipher(queue, global_dim, local_dim, inputString_buf, len_buf, outputString_buf)
 
-	# 8. Move the kernel's output data back to the host memory
-	cl.enqueue_copy(queue, output_string, outputString_buf)
+		# 8. Move the kernel's output data back to the host memory
+		cl.enqueue_copy(queue, output_string, outputString_buf)
 
-	print "OpenCL output: ", output_string
+		print "OpenCL output: ", output_string
 
+	elif (size > max_size):
+		input_strings = [input_string[i:i+max_size] for i in range(0, len(input_string), max_size)]
+		output_string_n = ""
+		for input_div in input_strings:
+			print len(input_div)
+			len_buf = cl.Buffer(context, mem_flags.READ_ONLY | mem_flags.COPY_HOST_PTR, hostbuf=size)
+			inputString_buf = cl.Buffer(context, mem_flags.READ_ONLY | mem_flags.COPY_HOST_PTR, hostbuf=input_div)
+			output_string = np.empty_like(input_div)
+			outputString_buf = cl.Buffer(context, mem_flags.WRITE_ONLY, sys.getsizeof(output_string))
+
+			# 7. Map buffers to kernel arguments and deploy the kernel, with specified local and global dimensions
+			global_dim = (len(input_div),) if (len(input_div) <= 16) else (16, int(math.ceil(len(input_div)/16.0)))
+			local_dim = None if (len(input_div) < 16) else (4,int(math.ceil(len(input_div)/16.0))/2)
+			program.apply_cipher(queue, global_dim, local_dim, inputString_buf, len_buf, outputString_buf)
+
+			# 8. Move the kernel's output data back to the host memory
+			cl.enqueue_copy(queue, output_string, outputString_buf)
+			output_string_n += str(output_string)
+
+			print "OpenCL output: ", output_string
+		print "OpenCL final output N: ", output_string_n
 	return
 
 
-def atbashEncodeCUDA(input_string):
-	op = numpy.empty_like(input_string)
-	n = len(input_string)
-	size = n * sys.getsizeof(' ')
+# def atbashEncodeCUDA(input_string):
+# 	op = numpy.empty_like(input_string)
+# 	n = len(input_string)
+# 	size = n * sys.getsizeof(' ')
+#
+# 	inp_gpu = cuda.mem_alloc(n * size)
+# 	op_gpu = cuda.mem_alloc(n * size)
+#
+# 	cuda.memcpy_htod(inp_gpu, input_string)
+# 	cuda.memcpy_htod(op_gpu, op)
+#
+# 	mod = SourceModule("""
+# 	    __global__ void apply_cipher(const char* inp, char* op, int len)
+# 	    {
+# 	        int idx = threadIdx.x;
+# 	        float ASCII = 0.0;
+# 	        if ( idx <= len ){
+# 	            ASCII = (float) inp[idx];
+# 	            op[idx] = ASCII + 25.0 - 2 * ( ASCII - 65.0 );
+# 	        }
+# 	    }
+# 	    """)
+#
+# 	apply_cipher = mod.get_function("apply_cipher")
+# 	apply_cipher(inp_gpu, op_gpu, numpy.uint32(n), block=(n,1,1))
+#
+# 	cuda.memcpy_dtoh(op, op_gpu)
+# 	print "CUDA output: ", op
+#
+# 	return
 
-	inp_gpu = cuda.mem_alloc(n * size)
-	op_gpu = cuda.mem_alloc(n * size)
+def nTest(input_string, n, lang="PYTHON"):
+	n_string = ""
+	for x in range(n):
+		n_string += input_string
 
-	cuda.memcpy_htod(inp_gpu, input_string)
-	cuda.memcpy_htod(op_gpu, op)
-
-	mod = SourceModule("""
-	    __global__ void apply_cipher(const char* inp, char* op, int len)
-	    {
-	        int idx = threadIdx.x;
-	        float ASCII = 0.0;
-	        if ( idx <= len ){
-	            ASCII = (float) inp[idx];
-	            op[idx] = ASCII + 25.0 - 2 * ( ASCII - 65.0 );
-	        }
-	    }
-	    """)
-
-	apply_cipher = mod.get_function("apply_cipher")
-	apply_cipher(inp_gpu, op_gpu, numpy.uint32(n), block=(n,1,1))
-
-	cuda.memcpy_dtoh(op, op_gpu)
-	print "CUDA output: ", op
+	if ( lang == "PYTHON" ):
+		atbashEncodePY(n_string)
+	elif ( lang == "OPENCL"):
+		atbashEncodeOCL(n_string)
 
 	return
 
@@ -187,13 +204,11 @@ def main(_outdir_="/etl_output/"):
 	'''Default arguments: _outdir_ - where output files will go'''
 
 	### Execute Project Task in Python
-	input_string = "HELLOMYNAMEISALEX"
-	cipher_map = atbashInit()
-	jumble = atbashEncodePY(input_string, cipher_map)
-	print jumble
-
-	atbashEncodeOCL(input_string)
-	atbashEncodeCUDA(input_string)
+	input_string = "K"
+	nTest(input_string, 68, "OPENCL")
+	# atbashEncodePY(input_string)
+	# atbashEncodeOCL(input_string)
+	# atbashEncodeCUDA(input_string)
 
 
 
