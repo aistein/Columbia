@@ -155,13 +155,6 @@ def atbashEncodeOCL(input_string):
 def atbashEncodeCUDA(input_string):
 	op = np.empty_like(input_string)
 	n = len(input_string)
-	size = n * sys.getsizeof(' ')
-
-	inp_gpu = cuda.mem_alloc(n * size)
-	op_gpu = cuda.mem_alloc(n * size)
-
-	cuda.memcpy_htod(inp_gpu, input_string)
-	cuda.memcpy_htod(op_gpu, op)
 
 	mod = SourceModule("""
 	    __global__ void apply_cipher(const char* inp, char* op, int len)
@@ -176,10 +169,40 @@ def atbashEncodeCUDA(input_string):
 	    """)
 
 	apply_cipher = mod.get_function("apply_cipher")
-	apply_cipher(inp_gpu, op_gpu, np.uint32(n), block=(n,1,1))
+	# max_size = pycuda.autoinit.device.get_attribute(max_threads_per_block)
+        max_size = 1024
+	if n > max_size :
+		input_strings = [input_string[i:i+max_size] for i in range(0, len(input_string), max_size)]
+		output_string_n = ""
+		for div in input_strings :
+			op_div = np.empty_like(div)
+			n_div = len(div)
+			size_div = n_div * sys.getsizeof(' ')
 
-	cuda.memcpy_dtoh(op, op_gpu)
-	print "CUDA output: ", op
+			inp_gpu = cuda.mem_alloc(size_div)
+			op_gpu = cuda.mem_alloc(size_div)
+
+			cuda.memcpy_htod(inp_gpu, div)
+			cuda.memcpy_htod(op_gpu, op_div)
+			apply_cipher(inp_gpu, op_gpu, np.uint32(n_div), block=(n_div,1,1))
+
+			cuda.memcpy_dtoh(op_div, op_gpu)
+			output_string_n += str(op_div)
+
+		print "CUDA output: ", output_string_n
+	else :
+		size = n * sys.getsizeof(' ')
+
+		inp_gpu = cuda.mem_alloc(size)
+		op_gpu = cuda.mem_alloc(size)
+
+		cuda.memcpy_htod(inp_gpu, input_string)
+		cuda.memcpy_htod(op_gpu, op)
+		apply_cipher(inp_gpu, op_gpu, np.uint32(n), block=(n,1,1))
+
+		cuda.memcpy_dtoh(op, op_gpu)
+
+		print "CUDA output: ", op
 
 	return
 
@@ -208,7 +231,7 @@ def main(_outdir_="/etl_output/"):
 
 	### Execute Project Task in Python
 	input_string = "K"
-	nTest(input_string, 2048, "OPENCL")
+	nTest(input_string, 4096, "CUDA")
 	# atbashEncodePY(input_string)
 	# atbashEncodeOCL(input_string)
 	# atbashEncodeCUDA(input_string)
