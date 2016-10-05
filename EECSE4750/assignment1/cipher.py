@@ -144,11 +144,16 @@ def atbashEncodeCUDA(input_string):
 	mod = SourceModule("""
 	    __global__ void apply_cipher(const char* inp, char* op, int len)
 	    {
-	        int idx = threadIdx.x;
+	        int tidx = threadIdx.x;
+			int bidx = blockIdx.x;
+			int bdimx = blockDim.x;
+
+			int oidx = bidx * bdimx + tidx;
+
 	        float ASCII = 0.0;
-	        if ( idx <= len ){
-	            ASCII = (float) inp[idx];
-	            op[idx] = ASCII + 25.0 - 2 * ( ASCII - 65.0 );
+	        if ( oidx <= len ){
+	            ASCII = (float) inp[oidx];
+	            op[oidx] = ASCII + 25.0 - 2 * ( ASCII - 65.0 );
 	        }
 	    }
 	    """)
@@ -167,9 +172,12 @@ def atbashEncodeCUDA(input_string):
 	cuda.memcpy_htod(op_gpu, op)
 
 	b_size = n if (n <= max_size) else max_size
+	print b_size
+	g_size = 1 if (n <= max_size) else int(math.ceil(n/float(max_size)))
+	print g_size
 
 	start = time.time()
-	apply_cipher(inp_gpu, op_gpu, np.uint32(n), block=(b_size, 1, 1))
+	apply_cipher(inp_gpu, op_gpu, np.uint32(n), block=(b_size, 1, 1), grid=(g_size, 1, 1))
 	runtime = time.time() - start
 
 	cuda.memcpy_dtoh(op, op_gpu)
