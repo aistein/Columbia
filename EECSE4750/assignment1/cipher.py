@@ -273,20 +273,20 @@ def main(_repetitions_=1):
 			import matplotlib as mpl
 			mpl.use('agg')
 			import matplotlib.pyplot as plt
-			px = list(xrange(len(python_times_norm)))
-			ox = list(xrange(len(ocl_times_norm)))
-			cx = list(xrange(len(cuda_times_norm)))
+			px = list(xrange(len(python_times)))
+			ox = list(xrange(len(ocl_times)))
+			cx = list(xrange(len(cuda_times)))
 
 			plt.gcf()
-			plt.plot(px, python_times_norm, color='r', label='python')
-			plt.plot(ox, ocl_times_norm, color='b', label='openCL')
-			plt.plot(cx, cuda_times_norm, color='g', label='CUDA')
+			plt.plot(px, python_times, color='r', label='python')
+			plt.plot(ox, ocl_times, color='b', label='openCL')
+			plt.plot(cx, cuda_times, color='g', label='CUDA')
 			plt.xlabel('length of string')
-			plt.ylabel('normalized time')
+			plt.ylabel('time')
 			plt.legend(loc='upper left')
 			plt.gca().set_xlim((min(px), max(px)))
-			plt.gca().set_ylim((min(python_times_norm)/2, 2*max(ocl_times_norm)))
-			plt.savefig('python_times.png')
+			plt.gca().set_ylim((min(python_times)/2, max(python_times)*1.2))
+			plt.savefig('python_vs_ocl_vs_cuda_times.png')
 
 
 if __name__ == '__main__':

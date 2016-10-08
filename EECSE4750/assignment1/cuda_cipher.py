@@ -13,7 +13,7 @@
 # Instructions:
 #
 # If you wish to increase the length of the string under test, scroll to the bottom of the file, replace "100" with
-# desired number.
+# desired number.  To produce a graph, set TEST_ALL=True.
 #
 #########################################################################################################################
 #########################################################################################################################
@@ -157,24 +157,36 @@ def main(_repetitions_=1):
 
     '''Default arguments: _repetitions_ - how many times to repeat input string'''
 
-    TEST_ALL = True
+    TEST_ALL = False
 
     ### not TEST_ALL :
     ###     Don't collect any data, just print the results for a single run on each method for a string of
     ###     length _repetitions_.  Test to ensure that the outputs are equal
     if (not TEST_ALL):
+
+		### Part 1:  Input your name as an array of characters. Implement this simple cipher on Python.
+		name = "ALEX"
+		print "PART 1 (PYTHON): ", name," --> ", str(atbashEncodePY(name)[1])
+
+        ### Part 2: Implement the same using CUDA.
+		print "PART 2 (CUDA): ", name," --> ", str(atbashEncodeCUDA(name)[1])
+
+		### Part 3: Repeat 1 & 2 With Random String Lengths and Contents
+
         ### Generate a random uppercase ASCII string of length _repetitions_
-        input_string = ''.join(random.choice(string.ascii_uppercase) for _ in range(_repetitions_))
+		input_string = ''.join(random.choice(string.ascii_uppercase) for _ in range(_repetitions_))
 
         ### Run the tests
-        pytime, pyout = nTest(input_string, _repetitions_, "PYTHON")
-        ctime, cout = nTest(input_string, _repetitions_, "CUDA")
+		pytime, pyout = nTest(input_string, _repetitions_, "PYTHON")
+		ctime, cout = nTest(input_string, _repetitions_, "CUDA")
 
-        print "PYTHON results: ", pytime
-        print "CUDA results: ", ctime
+		print "PART 3a (PYTHON): ", input_string," --> ", pyout
+		print "PYTHON results: ", pytime
+		print "PART 3b (CUDA): ", input_string," --> ", cout
+		print "CUDA results: ", ctime
 
         ### Test to be sure the outputs of each method of encoding produce the same results
-        print "Outputs Equal." if (pyout == str(cout)) else "Outputs Unequal."
+		print "Outputs Equal." if (pyout == str(cout)) else "Outputs Unequal."
 
     ### TEST_ALL :
     ###     Collect data on running time it takes to run the cipher in both methods from string length 1
@@ -205,28 +217,24 @@ def main(_repetitions_=1):
         	python_times.append(np.average(python_times_tmp))
         	cuda_times.append(np.average(cuda_times_tmp))
 
-        ### Normalize the Data for good graphs
-        python_times_norm = [float(val)/max(python_times) for val in python_times]
-        cuda_times_norm = [float(val)/max(cuda_times) for val in cuda_times]
-
         MAKE_PLOT = True
         if MAKE_PLOT:
         	import matplotlib as mpl
         	mpl.use('agg')
         	import matplotlib.pyplot as plt
-        	px = list(xrange(len(python_times_norm)))
-        	cx = list(xrange(len(cuda_times_norm)))
+        	px = list(xrange(len(python_times)))
+        	cx = list(xrange(len(cuda_times)))
 
         	plt.gcf()
-        	plt.plot(px, python_times_norm, color='r', label='python')
-        	plt.plot(cx, cuda_times_norm, color='g', label='CUDA')
+        	plt.plot(px, python_times, color='r', label='python')
+        	plt.plot(cx, cuda_times, color='g', label='CUDA')
         	plt.xlabel('length of string')
-        	plt.ylabel('normalized time')
+        	plt.ylabel('time')
         	plt.legend(loc='upper left')
         	plt.gca().set_xlim((min(px), max(px)))
-        	plt.gca().set_ylim((min(python_times_norm)/2, 2*max(cuda_times_norm)))
+        	plt.gca().set_ylim((min(python_times)/2, max(python_times)*1.2))
         	plt.savefig('python_v_cuda_times.png')
 
 
 if __name__ == '__main__':
-	main(100)
+	main(20)
