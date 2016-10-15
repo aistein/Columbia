@@ -1,0 +1,144 @@
+#########################################################################################################################
+# HEADER
+#
+# Filename:    matrix_ops_cuda.py
+# Description: Implementation of Assignment 2
+#
+# Owner:       Alexander Stein
+# Date:        10/19/2016
+# School:      Columbia University
+# Class:       EECSE4750
+#########################################################################################################################
+#########################################################################################################################
+# Instructions:
+#
+#########################################################################################################################
+#########################################################################################################################
+# References
+#
+# PyCUDA Examples, Andreas Klockner - https://wiki.tiker.net/PyCuda/Examples/ArithmeticExample
+#
+#########################################################################################################################
+
+#########################################################################################################################
+# IMPORT STATEMENTS
+#########################################################################################################################
+
+# Imports for PyCUDA
+import pycuda.driver as cuda
+import pycuda.autoinit
+from pycuda.compiler import SourceModule
+
+# General Imports
+import numpy as np
+import sys
+import string
+import random
+import math
+import time
+
+#########################################################################################################################
+# CONFIGURATIONS
+#########################################################################################################################
+
+#########################################################################################################################
+# CLASSES
+#########################################################################################################################
+
+#########################################################################################################################
+# Function Definitions
+#########################################################################################################################
+
+def atbashEncodePY(input_string):
+
+	'''applies cipher to an input string'''
+
+	# map the input to output using the cipher
+	output = ""
+
+	start = time.time()
+	for idx, val in enumerate(input_string):
+		ascii = ord(val)
+		output += chr(ascii + 25 - 2 * (ascii - 65))
+	runtime = time.time() - start
+
+	return runtime, output
+
+def atbashEncodeCUDA(input_string):
+
+### 1,2.3. Platform Info, Device Info, and Context are all obtained with the import statement "import pycuda.autoinit"
+
+### 4. Create a program for the context, give it a kernel, and build
+    mod = SourceModule("""
+        __global__ void apply_cipher(const char* inp, char* op, int len)
+        {
+            // This input will be a 2-D matrix, so we only need three pieces of info to work with it (function of block grid)
+    	        int tidx = threadIdx.x;
+    			int bidx = blockIdx.x;
+    			int bdimx = blockDim.x;
+
+    		// ATBASH Encoding can be easily accomplished with some simple ASCII Algebra
+    		// A = 65, Z = 90, A-Z = 25, e.g. B-Y = 23, C-X = 21 ... ASCII(OUT) = ASCII(IN) + 25 - (2 * (ASCII(IN) - 65))
+
+    		// total avaialbe threads may be more than needed.
+            // They can be trimmed with the knowledge that matrices are "flattened," i.e. actually stored as a 1-D
+            // contiguous memory array.  Thus, to access the right element of the matrix in the format of the 1-D
+            // array, we need to calculate the index "oid_x = bdim_x * bid_x + tid_x"
+
+    			int oidx = bidx * bdimx + tidx;
+    	        int ASCII = 0;
+
+    	        if ( oidx <= len ){
+    	            ASCII = inp[oidx];
+    	            op[oidx] = ASCII + 25 - 2 * ( ASCII - 65 );
+    	        }
+        }
+        """)
+    apply_cipher = mod.get_function("apply_cipher")
+
+    ### 5. Command Queue is also handled with import statement "import pycuda.autoinit"
+
+    ### 6. Allocate device memory and move input data from the host to the device memory.
+    op = np.empty_like(input_string)
+    n = len(input_string)
+    max_size = 1024
+    size = n * sys.getsizeof('A')
+
+    inp_gpu = cuda.mem_alloc(size)
+    op_gpu = cuda.mem_alloc(size)
+
+    cuda.memcpy_htod(inp_gpu, input_string)
+    cuda.memcpy_htod(op_gpu, op)
+
+    ### 7. Map buffers to kernel arguments and deploy the kernel, with specified block and grid dimensions
+    ###        CUDA organizes memory into a "grid of blocks containing threads."
+    ###        Here the grid is 1-D, as are the blocks, each containing 1024 threads.
+
+    b_size = n if (n <= max_size) else max_size
+    g_size = 1 if (n <= max_size) else int(math.ceil(n/float(max_size)))
+
+    ## Time the deployment of the kernel for metrics
+    start = time.time()
+    apply_cipher(inp_gpu, op_gpu, np.uint32(n), block=(b_size, 1, 1), grid=(g_size, 1, 1))
+    runtime = time.time() - start
+
+    ### 8. Move the kernel's output data back to the host memory
+    cuda.memcpy_dtoh(op, op_gpu)
+
+
+    return runtime, op
+
+#########################################################################################################################
+# Main
+#########################################################################################################################
+
+def main(_repetitions_=1):
+
+    '''Default arguments: _repetitions_ - how many times to repeat input string'''
+
+
+
+
+
+if __name__ == '__main__':
+	main(20)
