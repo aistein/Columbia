@@ -122,7 +122,7 @@ def main(_M_=5, _N_=5):
                           _N_ - number of rows in input matrix'''
 
     # A = np.matrix('1 2 3 4; 5 6 7 8; 9 10 11 12; 13 14 15 16; 17 18 19 20; 21 22 23 24; 25 26 27 28').astype(np.uint32)
-    A = np.matrix(np.random.random_integers(0, 100, (_M_, _N_)).astype(np.uint32))
+    A = np.matrix(np.random.random_integers(0, 9, (_M_, _N_)).astype(np.uint32))
 
     start = time.time()
     A_t = transposePython(A)
@@ -133,7 +133,7 @@ def main(_M_=5, _N_=5):
     print "Flattened: ", A.A1, "\n"
     print runtime
 
-    print "Running OCL Test\n"
+    print "Running CUDA Test\n"
     runtime, T = transposeCUDA(A)
     print np.uint32(T).reshape(A_t.shape)
     print runtime
