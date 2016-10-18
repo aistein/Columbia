@@ -146,27 +146,28 @@ def naiveMultiplyOpenCL (A):
     	__kernel void transpose(__global const unsigned int *A, __global unsigned int *T, __global unsigned int *X, unsigned int M, unsigned int N)
     	{
 
-            unsigned int idx = get_global_id(0);
-            unsigned int idy = get_global_id(1);
-            unsigned int dimx = get_global_size(0);
+                unsigned int idx = get_global_id(0);
+                unsigned int idy = get_global_id(1);
+                unsigned int dimx = get_global_size(0);
 
-            unsigned int id = dimx * idy + idx;
+                unsigned int id = dimx * idy + idx;
 
             // Multiplication:
             // X[j*M + i] = Sum[k = 0 --> M]{A[i*M + k] * A_t[k*M + j]}
 
-            unsigned int i, j, k, xij;
-            i = id % M;
-            j = id / M;
-            xij = 0;
+            // Accumulate Sum of Row-A * Column-T into X[i][j]
+                unsigned int i, j, k, xij;
+                i = id % M;
+                j = id / M;
+                xij = 0;
+                for (k = 0; k < N; k++){
+                    xij += A[j*N + k] * T[k*M + i];
+                }
 
-            for (k = 0; k < N; k++){
-                xij += A[j*N + k] * T[k*M + i];
-            }
-
-            if(id < M * M){
-                X[id] = xij;
-            }
+            // Input Matrix 'A' is MxN, and 'T' is NxM, so X is MxM
+                if(id < M * M){
+                    X[id] = xij;
+                }
 
     	}// end kernel
     	""").build()
