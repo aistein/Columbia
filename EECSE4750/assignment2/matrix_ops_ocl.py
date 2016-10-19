@@ -206,6 +206,84 @@ def naiveMultiplyOpenCL (A):
 
     return runtime, X
 
+def optimizedMultiplyOpenCL (A):
+    ''' A is expected to be a numpy matrix object of dimensionsd M*N '''
+
+    ### 1. Obtain OpenCL Platform
+    platform = cl.get_platforms()[0]
+
+    ### 2. Obtain Device ID for GPU
+    device_id = platform.get_devices()[0]
+
+    ### 3. Create Context for selected device
+    context = cl.Context([device_id])
+
+    ### 4. Create a program for the context, give it a kernel, and build
+    program = cl.Program(context,
+        """
+    	__kernel void transpose(__global const unsigned int *A, __global unsigned int *T, __global unsigned int *X, unsigned int M, unsigned int N)
+    	{
+
+                unsigned int idx = get_global_id(0);
+                unsigned int idy = get_global_id(1);
+                unsigned int dimx = get_global_size(0);
+
+                unsigned int id = dimx * idy + idx;
+
+            // Multiplication:
+            // X[j*M + i] = Sum[k = 0 --> M]{A[i*M + k] * A_t[k*M + j]}
+
+            // Accumulate Sum of Row-A * Column-T into X[i][j]
+                unsigned int i, j, k, xij;
+                i = id % M;
+                j = id / M;
+                xij = 0;
+                for (k = 0; k < N; k++){
+                    xij += A[j*N + k] * T[k*M + i];
+                }
+
+            // Input Matrix 'A' is MxN, and 'T' is NxM, so X is MxM
+                if(id < M * M){
+                    X[id] = xij;
+                }
+
+    	}// end kernel
+    	""").build()
+
+    ### 5. Create a command queue for the target device
+    queue = cl.CommandQueue(context)
+
+    ### 6. Allocate device memory and move input data from the host to the device memory.
+    mem_flags = cl.mem_flags
+    M, N = A.shape
+    max_size = 1024
+
+    ### Note: *.A1 flattens the matrix into a row-major 1-D array
+    A_buf = cl.Buffer(context, mem_flags.READ_ONLY | mem_flags.COPY_HOST_PTR, hostbuf=A.A1)
+    T_buf = cl.Buffer(context, mem_flags.READ_ONLY | mem_flags.COPY_HOST_PTR, hostbuf=A.T.A1)
+    X = np.empty_like(np.matrix(np.zeros((M,M)))).astype(np.uint32)
+    X_buf = cl.Buffer(context, mem_flags.WRITE_ONLY, X.nbytes)
+
+    ### 7. Map buffers to kernel arguments and deploy the kernel, with specified local and global dimensions
+    ###    Choosing Dimensions:
+    ###        A given work-group cannot exceed 1024 work-items; if > 1024 are required, A new rank is created
+    ###        Excess work-item space is trimmed in the kernel with 'if ((gdim_x * gid_y + gid_x) < len){''
+
+    global_dim = (max_size, int(math.ceil(M*N/float(max_size))))
+    # print global_dim
+    local_dim = (max_size,1)
+    # print local_dim
+
+    ## Time the deployment of the kernel for metrics
+    start = time.time()
+    program.transpose(queue, global_dim, local_dim, A_buf, T_buf, X_buf, np.uint32(M), np.uint32(N))
+    runtime = time.time() - start
+
+    ### 8. Move the kernel's output data back to the host memory
+    cl.enqueue_copy(queue, X, X_buf)
+
+    return runtime, X
+
 def isSymmetric(A):
     ''' expects a numpy matrix of dimensions NxM '''
     return (A.T == A).all()
