@@ -191,7 +191,7 @@ def naiveMultiplyCUDA (A):
 
     return runtime, X
 
-def optimizeMultiplyCUDA (A):
+def optimizedMultiplyCUDA (A):
     ''' A is expected to be a numpy matrix object of dimensionsd M*N '''
 
 
@@ -320,7 +320,7 @@ def main(_M_=5, _N_=5):
     print "is it symmetric? ", isSymmetric(X)
     # print "A * A_t (naive CUDA): \n", np.uint32(X).reshape(_M_, _M_)
     print "CUDA Naive Multiply time: ",runtime
-    runtime, X = optimizeMultiplyCUDA(A)
+    runtime, X = optimizedMultiplyCUDA(A)
     # print "A * A_t (optimized CUDA): \n", np.uint32(X).reshape(_M_, _M_)
     print "CUDA Optimized Multiply time: ", runtime
 
