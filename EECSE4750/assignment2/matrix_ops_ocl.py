@@ -143,7 +143,7 @@ def naiveMultiplyOpenCL (A):
     ### 4. Create a program for the context, give it a kernel, and build
     program = cl.Program(context,
         """
-    	__kernel void transpose(__global const unsigned int *A, __global unsigned int *T, __global unsigned int *X, unsigned int M, unsigned int N)
+    	__kernel void naive_multiply(__global const unsigned int *A, __global unsigned int *T, __global unsigned int *X, unsigned int M, unsigned int N)
     	{
 
                 unsigned int idx = get_global_id(0);
@@ -198,7 +198,7 @@ def naiveMultiplyOpenCL (A):
 
     ## Time the deployment of the kernel for metrics
     start = time.time()
-    program.transpose(queue, global_dim, local_dim, A_buf, T_buf, X_buf, np.uint32(M), np.uint32(N))
+    program.naive_multiply(queue, global_dim, local_dim, A_buf, T_buf, X_buf, np.uint32(M), np.uint32(N))
     runtime = time.time() - start
 
     ### 8. Move the kernel's output data back to the host memory
@@ -221,31 +221,34 @@ def optimizedMultiplyOpenCL (A):
     ### 4. Create a program for the context, give it a kernel, and build
     program = cl.Program(context,
         """
-    	__kernel void transpose(__global const unsigned int *A, __global unsigned int *T, __global unsigned int *X, unsigned int M, unsigned int N)
+    	__kernel void opt_multiply(__global const unsigned int *A, __global unsigned int *T, __global unsigned int *X, unsigned int M, unsigned int N)
     	{
+            // Define Constants
+                #define TILE_WIDTH 5
 
-                unsigned int idx = get_global_id(0);
-                unsigned int idy = get_global_id(1);
-                unsigned int dimx = get_global_size(0);
+            // Indices needed for optimization
+                unsigned int j , k;
+                unsigned int i = get_global_id(0); // ROWs
+                unsigned int xvalue = 0;
+                unsigned int Awrk[1024];
 
-                unsigned int id = dimx * idy + idx;
 
-            // Multiplication:
-            // X[j*M + i] = Sum[k = 0 --> M]{A[i*M + k] * A_t[k*M + j]}
+            // Pull A into private memory for faster accesses
+            for(k = 0; k < M; k++){
+                Awrk[k] = A[i*M + k];
+            }//end k-for
 
-            // Accumulate Sum of Row-A * Column-T into X[i][j]
-                unsigned int i, j, k, xij;
-                i = id % M;
-                j = id / M;
-                xij = 0;
-                for (k = 0; k < N; k++){
-                    xij += A[j*N + k] * T[k*M + i];
-                }
+            // Perform the Multiplication for a whole row
+            for(j = 0; j < M; j++){
 
-            // Input Matrix 'A' is MxN, and 'T' is NxM, so X is MxM
-                if(id < M * M){
-                    X[id] = xij;
-                }
+                xvalue = 0;
+                for(k = 0; k < M; k++){
+                    xvalue += Awrk[k]*T[k*M+j];
+                }//end k-for
+
+                X[i*M + j] = xvalue;
+
+            }//end j-for
 
     	}// end kernel
     	""").build()
@@ -276,7 +279,7 @@ def optimizedMultiplyOpenCL (A):
 
     ## Time the deployment of the kernel for metrics
     start = time.time()
-    program.transpose(queue, global_dim, local_dim, A_buf, T_buf, X_buf, np.uint32(M), np.uint32(N))
+    program.opt_multiply(queue, global_dim, local_dim, A_buf, T_buf, X_buf, np.uint32(M), np.uint32(N))
     runtime = time.time() - start
 
     ### 8. Move the kernel's output data back to the host memory
@@ -305,9 +308,9 @@ def main(_M_=5, _N_=5):
     A_t = transposePython(A)
     runtime = time.time() - start
 
-    # print "Matrix: ", A, "\n"
-    # print "Transpose: ", A_t, "\n"
-    # print "Flattened: ", A.A1, "\n"
+    print "Matrix: ", A, "\n"
+    print "Transpose: ", A_t, "\n"
+    print "Flattened: ", A.A1, "\n"
 
     print "\nRunning Python Test\n"
     print "Python Transpose time: ",runtime
@@ -315,18 +318,21 @@ def main(_M_=5, _N_=5):
     start = time.time()
     A_m = multiplyPython(A)
     runtime = time.time() - start
-    # print "A * A_t: \n", A_m, "\n"
+    print "A * A_t: \n", A_m, "\n"
     print "is it symmetric? ", isSymmetric(A_m)
     print "Python Multiply time: ",runtime, "\n"
 
     print "Running OCL Test\n"
     runtime, T = transposeOpenCL(A)
-    # print "Transpose: \n", np.uint32(T).reshape(A_t.shape)
+    print "Transpose: \n", np.uint32(T).reshape(A_t.shape)
     print "OCL Transpose time: ",runtime
     runtime, X = naiveMultiplyOpenCL(A)
     print "is it symmetric? ", isSymmetric(X)
-    # print "A * A_t (naive OCL): \n", np.uint32(X).reshape(_M_, _M_)
+    print "A * A_t (naive OCL): \n", np.uint32(X).reshape(_M_, _M_)
     print "OCL Naive Multiply time: ",runtime
+    runtime, Y = optimizedMultiplyOpenCL(A)
+    print "A * A_t (optimized OCL): \n", np.uint32(Y).reshape(_M_, _M_)
+    print "OCL Optimized Multiply time: ",runtime
 
 if __name__ == '__main__':
-	main(100, 100)
+	main(10, 10)

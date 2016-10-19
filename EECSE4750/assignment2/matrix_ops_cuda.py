@@ -141,14 +141,17 @@ def naiveMultiplyCUDA (A):
                 i = id % M;
                 j = id / M;
                 xij = 0;
-                for (k = 0; k < N; k++){
-                    xij += A[j*N + k] * T[k*M + i];
+            // Input Matrix 'A' is MxN, and 'T' is NxM, so X is MxM
+                if(id < M * M ){
+                    for (k = 0; k < N; k++){
+                        X[id] += A[j*N + k] * T[k*M + i];
+                    }
                 }
 
             // Input Matrix 'A' is MxN, and 'T' is NxM, so X is MxM
-                if(id < M * M){
-                    X[id] = xij;
-                }
+                //if(id < M * M){
+                //    X[id] = xij;
+                //}
         }
         """)
     multiply = mod.get_function("multiply")
@@ -199,7 +202,7 @@ def optimizeMultiplyCUDA (A):
         __global__ void multiply(const unsigned int *A, unsigned int *T, unsigned int *X, unsigned int M, unsigned int N)
         {
             // Define Constants
-                #define TILE_WIDTH 2
+                #define TILE_WIDTH 32
 
             // Indices needed for optimization
                 unsigned int tx = threadIdx.x;
@@ -221,14 +224,15 @@ def optimizeMultiplyCUDA (A):
                 for(int t = 0; t < N/TILE_WIDTH; t++){
                     ds_A[ty][tx] = A[Row*M + t*TILE_WIDTH + tx];
                     ds_T[ty][tx] = T[(t*TILE_WIDTH + ty)*N + Col];
-                    //__syncthreads();
+                    __syncthreads();
 
                     for(int i = 0; i < TILE_WIDTH; i++){
                         xvalue += ds_A[ty][i] * ds_T[i][tx];
                     }// multiply and sum the tiled indices
-                    //__syncthreads();
 
                 }// for all tiles
+
+                __syncthreads();
 
                 //X[Row*N + Col] = ds_A[ty][0]*ds_T[0][tx] + ds_A[ty][1]*ds_T[1][tx];
                 X[Row*N + Col] = xvalue;
@@ -265,7 +269,7 @@ def optimizeMultiplyCUDA (A):
     ## Time the deployment of the kernel for metrics
     start = time.time()
     # multiply(A_d, T_d, X_d, np.uint32(M), np.uint32(N), block=(b_size, 1, 1), grid=(g_size, 1, 1))
-    multiply(A_d, T_d, X_d, np.uint32(M), np.uint32(N), block=(16, 16, 1), grid=(16, 16, 1))
+    multiply(A_d, T_d, X_d, np.uint32(M), np.uint32(N), block=(32, 32, 1), grid=(8, 8, 1))
     runtime = time.time() - start
 
     ### 8. Move the kernel's output data back to the host memory
