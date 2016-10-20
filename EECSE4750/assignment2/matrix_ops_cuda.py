@@ -202,7 +202,7 @@ def optimizedMultiplyCUDA (A):
         __global__ void multiply(const unsigned int *A, unsigned int *T, unsigned int *X, unsigned int M, unsigned int N)
         {
             // Define Constants
-                #define TILE_WIDTH 32
+                #define TILE_WIDTH 2
 
             // Indices needed for optimization
                 unsigned int tx = threadIdx.x;
@@ -221,9 +221,20 @@ def optimizedMultiplyCUDA (A):
                 unsigned int Col = bx * blockDim.x + tx;
                 unsigned int xvalue = 0;
 
-                for(int t = 0; t < N/TILE_WIDTH; t++){
-                    ds_A[ty][tx] = A[Row*M + t*TILE_WIDTH + tx];
-                    ds_T[ty][tx] = T[(t*TILE_WIDTH + ty)*N + Col];
+                for(int t = 0; t < (N-1)/TILE_WIDTH + 1; t++){
+
+                    if(Row < M && (t*TILE_WIDTH + tx) < N){
+                        ds_A[ty][tx] = A[Row*N + t*TILE_WIDTH + tx];
+                    } else {
+                        ds_A[ty][tx] = 0;
+                    }
+
+                    if( (t*TILE_WIDTH + ty) < N && Col < M){
+                        ds_T[ty][tx] = T[(t*TILE_WIDTH + ty)*M + Col];
+                    } else {
+                        ds_T[ty][tx] = 0;
+                    }
+
                     __syncthreads();
 
                     for(int i = 0; i < TILE_WIDTH; i++){
@@ -235,7 +246,11 @@ def optimizedMultiplyCUDA (A):
                 __syncthreads();
 
                 //X[Row*N + Col] = ds_A[ty][0]*ds_T[0][tx] + ds_A[ty][1]*ds_T[1][tx];
-                X[Row*N + Col] = xvalue;
+                //if( Row < M && Col < N){
+                if ( (Row * M + Col) < M * M){
+                    X[Row*M+ Col] = xvalue;
+                    //X[Row*M + Col] = Row*M + Col;
+                }
 
         }// end kernel
         """)
@@ -269,7 +284,8 @@ def optimizedMultiplyCUDA (A):
     ## Time the deployment of the kernel for metrics
     start = time.time()
     # multiply(A_d, T_d, X_d, np.uint32(M), np.uint32(N), block=(b_size, 1, 1), grid=(g_size, 1, 1))
-    multiply(A_d, T_d, X_d, np.uint32(M), np.uint32(N), block=(32, 32, 1), grid=(8, 8, 1))
+    # multiply(A_d, T_d, X_d, np.uint32(M), np.uint32(N), block=(32, 32, 1), grid=(8, 8, 1))
+    multiply(A_d, T_d, X_d, np.uint32(M), np.uint32(N), block=(2, 2, 1), grid=(2, 2, 1))
     runtime = time.time() - start
 
     ### 8. Move the kernel's output data back to the host memory
@@ -290,39 +306,98 @@ def main(_M_=5, _N_=5):
     '''Default arguments: _M_ - number of columns in input matrix
                           _N_ - number of rows in input matrix'''
 
-    # A = np.matrix('1 2 3 4; 5 6 7 8; 9 10 11 12; 13 14 15 16; 17 18 19 20; 21 22 23 24; 25 26 27 28').astype(np.uint32)
-    A = np.matrix(np.random.random_integers(0, 10, (_M_, _N_)).astype(np.uint32))
-    # A = np.matrix(np.ones((_M_, _N_)).astype(np.uint32))
+    TEST_ALL = False
 
-    start = time.time()
-    A_t = transposePython(A)
-    runtime = time.time() - start
+    if (not TEST_ALL):
+        # A = np.matrix('1 2 3 4; 5 6 7 8; 9 10 11 12; 13 14 15 16; 17 18 19 20; 21 22 23 24; 25 26 27 28').astype(np.uint32)
+        A = np.matrix(np.random.random_integers(0, 10, (_M_, _N_)).astype(np.uint32))
+        # A = np.matrix('0 1 2; 3 4 5').astype(np.uint32)
+        # A = np.matrix(np.ones((_M_, _N_)).astype(np.uint32))
 
-    # print "Matrix: ", A, "\n"
-    # print "Transpose: ", A_t, "\n"
-    # print "Flattened: ", A.A1, "\n"
+        start = time.time()
+        A_t = transposePython(A)
+        runtime = time.time() - start
 
-    print "\nRunning Python Test\n"
-    print "Python Transpose time: ",runtime
+        print "Matrix: ", A, "\n"
+        print "Transpose: ", A_t, "\n"
+        print "Flattened: ", A.A1, "\n"
 
-    start = time.time()
-    A_m = multiplyPython(A)
-    runtime = time.time() - start
-    # print "A * A_t: \n", A_m, "\n"
-    print "is it symmetric? ", isSymmetric(A_m)
-    print "Python Multiply time: ",runtime, "\n"
+        print "\nRunning Python Test\n"
+        print "Python Transpose time: ",runtime
 
-    print "Running CUDA Test\n"
-    runtime, T = transposeCUDA(A)
-    # print "Transpose: \n", np.uint32(T).reshape(A_t.shape)
-    print "CUDA Transpose time: ",runtime
-    runtime, X = naiveMultiplyCUDA(A)
-    print "is it symmetric? ", isSymmetric(X)
-    # print "A * A_t (naive CUDA): \n", np.uint32(X).reshape(_M_, _M_)
-    print "CUDA Naive Multiply time: ",runtime
-    runtime, X = optimizedMultiplyCUDA(A)
-    # print "A * A_t (optimized CUDA): \n", np.uint32(X).reshape(_M_, _M_)
-    print "CUDA Optimized Multiply time: ", runtime
+        start = time.time()
+        A_m = multiplyPython(A)
+        runtime = time.time() - start
+        print "A * A_t: \n", A_m, "\n"
+        print "is it symmetric? ", isSymmetric(A_m)
+        print "Python Multiply time: ",runtime, "\n"
+
+        print "Running OCL Test\n"
+        runtime, T = transposeCUDA(A)
+        print "Transpose: \n", np.uint32(T).reshape(A_t.shape)
+        print "CUDA Transpose time: ",runtime
+        runtime, X = naiveMultiplyCUDA(A)
+        print "is it symmetric? ", isSymmetric(X)
+        print "A * A_t (naive CUDA): \n", np.uint32(X).reshape(_M_, _M_)
+        print "CUDA Naive Multiply time: ",runtime
+        runtime, Y = optimizedMultiplyCUDA(A)
+        print "A * A_t (optimized CUDA): \n", np.uint32(Y).reshape(_M_, _M_)
+        print "CUDA Optimized Multiply time: ",runtime
+
+    ### TEST_ALL :
+    ###     Collect data on running time it takes to run the cipher in both methods from string length 1
+    ###     all the way up to _repetitions_.  Produce a graph if desired
+    if TEST_ALL :
+        M = 3
+        python_times = []
+        ocl_times = []
+        ocl_opt_times = []
+
+        for k in xrange(1, 50) :
+
+            ### Generate a random uppercase ASCII string of length _repetitions_
+            A = np.matrix(np.random.random_integers(0, 10, (k*_M_,k*_N_)).astype(np.uint32))
+
+            python_times_tmp = []
+            ocl_times_tmp = []
+            ocl_opt_times_tmp = []
+
+            ### Average over M results on the same string to reduce outliers
+            for i in xrange(M):
+
+                ### Run the tests, store the results
+                pytime, pyout = multiplyPython(A)
+                ocltime, oclout = naiveMultiplyOpenCL(A)
+                oclotime, ocloout = optimizedMultiplyOpenCL(A)
+
+                python_times_tmp.append(pytime)
+                ocl_times_tmp.append(ocltime)
+                ocl_opt_times_tmp.append(oclotime)
+
+            python_times.append(np.average(python_times_tmp))
+            ocl_times.append(np.average(ocl_times_tmp))
+            ocl_opt_times.append(np.average(ocl_opt_times_tmp))
+
+        MAKE_PLOT = True
+        if MAKE_PLOT:
+            import matplotlib as mpl
+            mpl.use('agg')
+            import matplotlib.pyplot as plt
+            px = list(xrange(len(python_times)))
+            ox = list(xrange(len(ocl_times)))
+            oox = list(xrange(len(ocl_opt_times)))
+
+            plt.gcf()
+            plt.plot(px, python_times, color='r', label='python')
+            plt.plot(ox, ocl_times, color='g', label='OpenCL')
+            plt.plot(oox, ocl_opt_times, color='b', label='OpenCL Optimized')
+            plt.xlabel('(MxN) * k')
+            plt.ylabel('time')
+            plt.legend(loc='upper left')
+            plt.title('Matrix Multiplication: Python vs. OpenCL')
+            plt.gca().set_xlim((min(px), max(px)))
+            plt.gca().set_ylim((min(python_times)/2, max(ocl_times)*1.2))
+            plt.savefig('python_v_ocl_times.png')
 
 if __name__ == '__main__':
-	main(256, 256)
+	main(4, 5)
