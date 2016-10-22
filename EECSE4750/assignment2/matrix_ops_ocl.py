@@ -167,30 +167,6 @@ def naiveMultiplyOpenCL (A):
                 X[i*M + j] = xvalue;
             }
 
-
-            //    unsigned int idx = get_global_id(0);
-            //    unsigned int idy = get_global_id(1);
-            //    unsigned int dimx = get_global_size(0);
-
-            //    unsigned int id = dimx * idy + idx;
-
-            // Multiplication:
-            // X[j*M + i] = Sum[k = 0 --> M]{A[i*M + k] * A_t[k*M + j]}
-
-            // Accumulate Sum of Row-A * Column-T into X[i][j]
-            //    unsigned int i, j, k, xij;
-            //    i = id % M;
-            //    j = id / M;
-            //    xij = 0;
-            //    for (k = 0; k < N; k++){
-            //        xij += A[j*N + k] * T[k*M + i];
-            //    }
-
-            // Input Matrix 'A' is MxN, and 'T' is NxM, so X is MxM
-            //    if(id < M * M){
-            //        X[id] = xij;
-            //    }
-
     	}// end kernel
     	""").build()
 
@@ -319,12 +295,10 @@ def main(_M_=5, _N_=5):
     '''Default arguments: _M_ - number of columns in input matrix
                           _N_ - number of rows in input matrix'''
 
-    TEST_ALL = True
+    TEST_ALL = False
 
     if (not TEST_ALL):
-        # A = np.matrix('1 2 3 4; 5 6 7 8; 9 10 11 12; 13 14 15 16; 17 18 19 20; 21 22 23 24; 25 26 27 28').astype(np.uint32)
         A = np.matrix(np.random.random_integers(0, 10, (_M_, _N_)).astype(np.uint32))
-        # A = np.matrix(np.ones((_M_, _N_)).astype(np.uint32))
 
         start = time.time()
         A_t = transposePython(A)

@@ -54,7 +54,11 @@ def transposePython (A):
 
 def multiplyPython (A):
     ''' A is expected to be a numpy matrix object of dimension NxM '''
-    return np.dot(A, A.T)
+    start = time.time()
+    X = np.dot(A, A.T)
+    runtime = time.time() - start
+
+    return runtime, X
 
 def transposeCUDA (A):
     ''' A is expected to be a numpy matrix object of dimensionsd M*N '''
@@ -198,6 +202,7 @@ def optimizedMultiplyCUDA (A):
     ### 1,2.3. Platform Info, Device Info, and Context are all obtained with the import statement "import pycuda.autoinit"
 
     ### 4. Create a program for the context, give it a kernel, and build
+    ## FIXME : Only works for even-dimensioned, square matrices, something wrong with indexing
     mod = SourceModule("""
         __global__ void multiply(const unsigned int *A, unsigned int *T, unsigned int *X, unsigned int M, unsigned int N)
         {
@@ -245,11 +250,8 @@ def optimizedMultiplyCUDA (A):
 
                 __syncthreads();
 
-                //X[Row*N + Col] = ds_A[ty][0]*ds_T[0][tx] + ds_A[ty][1]*ds_T[1][tx];
-                //if( Row < M && Col < N){
                 if ( (Row * M + Col) < M * M){
                     X[Row*M+ Col] = xvalue;
-                    //X[Row*M + Col] = Row*M + Col;
                 }
 
         }// end kernel
@@ -263,6 +265,7 @@ def optimizedMultiplyCUDA (A):
     M, N = A.shape
     X = np.matrix(np.zeros((M,M))).astype(np.uint32)
     max_size = 1024
+    warp_size = 32
 
     size = A.nbytes
 
@@ -278,14 +281,13 @@ def optimizedMultiplyCUDA (A):
     ###        CUDA organizes memory into a "grid of blocks containing threads."
     ###        Here the grid is 1-D, as are the blocks, each containing 1024 threads.
 
-    b_size = M * M if (M * M <= max_size) else max_size
-    g_size = 1 if (M * M <= max_size) else int(math.ceil(M*M/float(max_size)))
+    b_size = (2,2,1)
+    g = int(math.ceil(float(M*N)/4.0))
+    g_size = (g,g,1)
 
     ## Time the deployment of the kernel for metrics
     start = time.time()
-    # multiply(A_d, T_d, X_d, np.uint32(M), np.uint32(N), block=(b_size, 1, 1), grid=(g_size, 1, 1))
-    # multiply(A_d, T_d, X_d, np.uint32(M), np.uint32(N), block=(32, 32, 1), grid=(8, 8, 1))
-    multiply(A_d, T_d, X_d, np.uint32(M), np.uint32(N), block=(2, 2, 1), grid=(2, 2, 1))
+    multiply(A_d, T_d, X_d, np.uint32(M), np.uint32(N), block=b_size, grid=g_size)
     runtime = time.time() - start
 
     ### 8. Move the kernel's output data back to the host memory
@@ -309,10 +311,7 @@ def main(_M_=5, _N_=5):
     TEST_ALL = False
 
     if (not TEST_ALL):
-        # A = np.matrix('1 2 3 4; 5 6 7 8; 9 10 11 12; 13 14 15 16; 17 18 19 20; 21 22 23 24; 25 26 27 28').astype(np.uint32)
         A = np.matrix(np.random.random_integers(0, 10, (_M_, _N_)).astype(np.uint32))
-        # A = np.matrix('0 1 2; 3 4 5').astype(np.uint32)
-        # A = np.matrix(np.ones((_M_, _N_)).astype(np.uint32))
 
         start = time.time()
         A_t = transposePython(A)
@@ -350,8 +349,8 @@ def main(_M_=5, _N_=5):
     if TEST_ALL :
         M = 3
         python_times = []
-        ocl_times = []
-        ocl_opt_times = []
+        cuda_times = []
+        cuda_opt_times = []
 
         for k in xrange(1, 50) :
 
@@ -359,24 +358,24 @@ def main(_M_=5, _N_=5):
             A = np.matrix(np.random.random_integers(0, 10, (k*_M_,k*_N_)).astype(np.uint32))
 
             python_times_tmp = []
-            ocl_times_tmp = []
-            ocl_opt_times_tmp = []
+            cuda_times_tmp = []
+            # cuda_opt_times_tmp = []
 
             ### Average over M results on the same string to reduce outliers
             for i in xrange(M):
 
                 ### Run the tests, store the results
                 pytime, pyout = multiplyPython(A)
-                ocltime, oclout = naiveMultiplyOpenCL(A)
-                oclotime, ocloout = optimizedMultiplyOpenCL(A)
+                ctime, cout = naiveMultiplyCUDA(A)
+                # cotime, coout = optimizedMultiplyCUDA(A)
 
                 python_times_tmp.append(pytime)
-                ocl_times_tmp.append(ocltime)
-                ocl_opt_times_tmp.append(oclotime)
+                cuda_times_tmp.append(ctime)
+                # cuda_opt_times_tmp.append(cotime)
 
             python_times.append(np.average(python_times_tmp))
-            ocl_times.append(np.average(ocl_times_tmp))
-            ocl_opt_times.append(np.average(ocl_opt_times_tmp))
+            cuda_times.append(np.average(cuda_times_tmp))
+            # cuda_opt_times.append(np.average(cuda_opt_times_tmp))
 
         MAKE_PLOT = True
         if MAKE_PLOT:
@@ -384,20 +383,20 @@ def main(_M_=5, _N_=5):
             mpl.use('agg')
             import matplotlib.pyplot as plt
             px = list(xrange(len(python_times)))
-            ox = list(xrange(len(ocl_times)))
-            oox = list(xrange(len(ocl_opt_times)))
+            cx = list(xrange(len(cuda_times)))
+            # cox = list(xrange(len(cuda_opt_times)))
 
             plt.gcf()
             plt.plot(px, python_times, color='r', label='python')
-            plt.plot(ox, ocl_times, color='g', label='OpenCL')
-            plt.plot(oox, ocl_opt_times, color='b', label='OpenCL Optimized')
+            plt.plot(cx, cuda_times, color='g', label='CUDA')
+            # plt.plot(cox, cuda_opt_times, color='b', label='CUDA Optimized')
             plt.xlabel('(MxN) * k')
             plt.ylabel('time')
             plt.legend(loc='upper left')
-            plt.title('Matrix Multiplication: Python vs. OpenCL')
+            plt.title('Matrix Multiplication: Python vs. CUDA')
             plt.gca().set_xlim((min(px), max(px)))
-            plt.gca().set_ylim((min(python_times)/2, max(ocl_times)*1.2))
-            plt.savefig('python_v_ocl_times.png')
+            plt.gca().set_ylim((min(python_times)/2, max(cuda_times)*1.2))
+            plt.savefig('python_v_cuda_noopt_times.png')
 
 if __name__ == '__main__':
-	main(4, 5)
+	main(8, 8)
