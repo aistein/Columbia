@@ -45,7 +45,8 @@ __global__ void convolve2d(unsigned int* A, unsigned int* K, const unsigned int 
         for(unsigned int m = 0; m < F; m++){
             for(unsigned int n = 0; n < F; n++){
                 // need "i-m+1" etc. because when i,j = 1,1 ... i-m,j-n = -1,-1
-                C[c_i*N + c_j] += K[m*F + n] * A[(i-m+1)*(N+2) + (j-n+1)];
+                C[c_i*N + c_j] += K[m*F +n] * A[(i-m+1)*(N+2) + (j-n+1)];
+                __syncthreads();
             }// end n filter dim
         }// end m filter dim
     }// end boundary check
