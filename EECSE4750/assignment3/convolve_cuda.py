@@ -23,6 +23,24 @@ import pycuda.autoinit
 ##CUDA KERNEL
 ############################
 
+        # if ( threadIdx.x == 0 && j != 0 ) {
+        # // vertical left block edges
+        #     DS_A_PAD[threadIdx.y*(N_LIM+2)+threadIdx.x] = A[i*N + (j-1)];
+        # }
+        # if ( threadIdx.x == N_LIM-1 && j != N-1 ) {
+        # // veritcal right block edges
+        #     DS_A_PAD[(threadIdx.y+1)*(N_LIM+2)+(threadIdx.x+2)] = A[i*N + (j+1)];
+        # }
+        # if ( threadIdx.y == 0 && i != 0 ) {
+        # // horizontal top block edges
+        #     DS_A_PAD[threadIdx.y*(N_LIM+2)+threadIdx.x] = A[(i-1)*N + j];
+        # }
+        # if ( threadIdx.y == M_LIM-1 && i != M-1 ) {
+        # // horizontal bottom block edges
+        #     DS_A_PAD[(threadIdx.y+2)*(N_LIM+2)+(threadIdx.x+1)] = A[(i+1)*N + j];
+        # }
+        # // internal elements
+
 kernel_code_template = """
 //2D Convolution function
 __global__ void convolve2d(unsigned int* A, unsigned int* K,
@@ -30,11 +48,11 @@ __global__ void convolve2d(unsigned int* A, unsigned int* K,
                            const unsigned int F, unsigned int* C)
 {
 
-    #ifndef A_M
-        #define A_M 3u
+    #ifndef TILE_M
+        #define TILE_M 3u
     #endif
-    #ifndef A_N
-        #define A_N 3u
+    #ifndef TILE_N
+        #define TILE_N 3u
     #endif
 
     // A - input size MxN
@@ -48,27 +66,75 @@ __global__ void convolve2d(unsigned int* A, unsigned int* K,
     unsigned int j = blockIdx.y * blockDim.y + threadIdx.y;
 
     if(i < M && j <  N){
+    // check to make sure we are within bounds of the overall output size
+
         // create flattened padded matrix size M+2 x N+2 to use for convolution input
         extern __shared__ unsigned int DS_A_PAD[];
-        for(unsigned int k = 0; k < A_M + 2; k++){
-            for(unsigned int l = 0; l < A_N + 2; l++){
-                DS_A_PAD[k*(A_N+2) + l] = 0;
+        unsigned int M_LIM = (M > 32) ? ((blockIdx.x+1)*blockDim.x < M) ? blockDim.x : blockDim.x - (blockIdx.x+1)*blockDim.x % M : M;
+        unsigned int N_LIM = (N > 32) ? ((blockIdx.y+1)*blockDim.y < N) ? blockDim.y : blockDim.y - (blockIdx.y+1)*blockDim.y % N : N;
+        for(unsigned int k = 0; k < M_LIM + 2; k++){
+            for(unsigned int l = 0; l < N_LIM + 2; l++){
+                DS_A_PAD[k*(N_LIM+2) + l] = 0;
             }
         }
-        __syncthreads();
-        DS_A_PAD[(i+1)*(A_N+2)+(j+1)] = A[i*A_N + j];
+
         __syncthreads();
 
-        // FIXME: for some reason, it seems the value needs to be cleared first
-        C[i*N + j] = 0;
-        for(unsigned int m = 0; m < F; m++){
-            for(unsigned int n = 0; n < F; n++){
-                C[i*N + j] += K[m*F + n] * DS_A_PAD[((i+1)-m+1)*(N+2) +((j+1)-n+1)];
-                //C[i*N +j] = 0;
-            }
+        if ( threadIdx.y == 0 && j != 0 ) {
+        // vertical left block edges - CHECK!
+            DS_A_PAD[(threadIdx.x+1)*(N_LIM+2)+threadIdx.y] = A[i*N + (j-1)];
         }
+        if ( threadIdx.y == N_LIM-1 && j != N-1 ) {
+        // veritcal right block edges - CHECK!
+            DS_A_PAD[(threadIdx.x+1)*(N_LIM+2)+(threadIdx.y+2)] = A[i*N + (j+1)];
+        }
+        if ( threadIdx.x == 0 && i != 0 ) {
+        // horizontal top block edges - CHECK!
+            DS_A_PAD[threadIdx.x*(N_LIM+2)+(threadIdx.y+1)] = A[(i-1)*N + j];
+        }
+        if ( threadIdx.x == M_LIM-1 && i != M-1 ) {
+        // horizontal bottom block edges - CHECK!
+            DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+(threadIdx.y+1)] = A[(i+1)*N + j];
+        }
+        if ( threadIdx.x == M_LIM-1 && threadIdx.y == N_LIM-1 && j != N-1 && i != M-1 ) {
+        // lower righthand corners (outside current block) - CHECK!
+            DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+(threadIdx.y+2)] = A[(i+1)*N + (j+1)];
+        }
+        if ( threadIdx.x == M_LIM-1 && threadIdx.y == 0 && j != 0 ) {
+        // lower lefthand corners (outside current block) - CHECK!
+            DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+threadIdx.y] = A[(i+1)*N + (j-1)];
+        }
+        if ( threadIdx.x == 0 && threadIdx.y == N_LIM-1 && i != 0 ) {
+        // upper righthand corners (outside current block) - CHECK!
+            DS_A_PAD[threadIdx.x*(N_LIM+2)+(threadIdx.y+2)] = A[(i-1)*N + (j+1)];
+        }
+        if ( threadIdx.x == 0 && threadIdx.y == 0 && i != 0 && j != 0 ) {
+        // upper lefthand corners (outside current block)
+            //DS_A_PAD[(threadIdx.x+1)*(N_LIM+2)+threadIdx.y] = A[i*N + (j-1)];
+            //DS_A_PAD[threadIdx.x*(N_LIM+2)+(threadIdx.y+1)] = A[(i-1)*N + j];
+            //DS_A_PAD[threadIdx.x*(N_LIM+2)+threadIdx.y] = A[(i-1)*N + (j-1)];
+        }
+        // internal elements
+          DS_A_PAD[(threadIdx.x+1)*(N_LIM+2)+(threadIdx.y+1)] = A[i*N + j];
+
         __syncthreads();
-    }
+
+        C[i*N + j] = DS_A_PAD[(threadIdx.x+1)*(N_LIM+2) + (threadIdx.y+1)];
+        //C[i*N + j] = i*N + j;
+
+        //// Convolution Calculation for element (i,j)
+        //C[i*N + j] = 0;
+        //for(unsigned int m = 0; m < F; m++){
+        //    for(unsigned int n = 0; n < F; n++){
+        //        //C[i*N + j] += K[m*F + n] * DS_A_PAD[((i+1)-m+1)*(N_LIM+2) +((j+1)-n+1)];
+        //        C[i*N + j] += K[m*F + n] * DS_A_PAD[((threadIdx.x+1)-m+1)*(N_LIM+2) +((threadIdx.y+1)-n+1)];
+        //        //C[i*N +j] = 0;
+        //    }
+        //}// end convolution calculation
+
+        __syncthreads();
+
+    }// end output boundary check
 }
 """
 
@@ -77,23 +143,15 @@ __global__ void convolve2d(unsigned int* A, unsigned int* K,
 ##################################################
 
 # Configurations
-M = 35 #rows
+M = 33 #rows
 N = 33 #columns
 F = 3 #square dim of "kernel/filter"
 
 a = np.random.randint(0, 9, (M,N)).astype(np.uint32) #a is matrix which will be convolved
 
-# create a padded matrix to pass into the kernel
-a_pad = np.empty([M+2, N+2]).astype(np.uint32)
-for i in xrange(M+2): # rows
-    for j in xrange(N+2): #columns
-        if (i > 0 and i < M+2 - 1) and (j > 0 and j < N+2 - 1):
-            a_pad[i,j] = a[i-1,j-1]
-        else:
-            a_pad[i,j] = 0
-
 # create an FxF filter of random numbers
-f = np.random.randint(0, 9, (F,F)).astype(np.uint32) #f is kernel matrix
+# f = np.random.randint(0, 9, (F,F)).astype(np.uint32) #f is kernel matrix
+f = np.ones((F,F)).astype(np.uint32) #f is kernel matrix
 
 # mode='same' gives equal (unpadded) input size to OUTPUT size
 # boundary='fill' gives zeros around the input as padding
@@ -102,25 +160,8 @@ c = conv2d(a, f, mode='same', boundary='fill')
 print "====================== PART 1 =========================="
 print "--------------------- PYTHON ---------------------------"
 print "a: \n", a
-print "a_f: \n",
 print "f: \n", f
 print "c: \n", c
-
-# implemented my own pythonic convolution to prepare for GPU Kernel deployment
-# c_test = np.empty_like(a)
-# for i in xrange(M+2): # rows
-#     for j in xrange(N+2): # columns
-#         # the above will iterate the filter over the whole of a_pad (padded)
-#         if((i > 0 and i < M+2 -1) and (j > 0 and j < N+2 -1)):
-#         # check to make sure we only operate within the bounds of the OUTPUT
-#             # adjust the indices we use on OUTPUT w.r.t. padded input
-#             c_i = i - 1;
-#             c_j = j - 1;
-#             for m in xrange(F):
-#                 for n in xrange(F):
-#                     # need "i-m+1" etc. becuase when i,j = 1,1 ... i-m,j-n = -1 -1
-#                     c_test[c_i, c_j] += f[m,n] * a_pad[i-m+1, j-n+1]
-# print ("c manual: ", c_test) if DEBUG else ''
 
 print "----------------------- CUDA ----------------------------"
 
@@ -128,9 +169,9 @@ print "----------------------- CUDA ----------------------------"
 kernel_code = kernel_code_template
 
 # compile the kernel code, with options
-A_M = str(M) + 'u'
-A_N = str(N) + 'u'
-options = "-DA_M=" + A_M + " -DA_N=" + A_N
+TILE_M = str(M) + 'u' if (M <= 32) else str(32) + 'u'
+TILE_N = str(N) + 'u' if (N <= 32) else str(32) + 'u'
+options = "-DTILE_M=" + TILE_M + " -DTILE_N=" + TILE_N
 OPTIONS = [_flag.strip() for _flag in options.split() if _flag.strip()]
 print OPTIONS
 mod = compiler.SourceModule(kernel_code,options=OPTIONS)
@@ -145,8 +186,9 @@ C_buf = gpuarray.empty((M,N),a.dtype)
 C_gpu = np.empty((M,N),a.dtype)
 
 # call to conv
-conv(A_buf,K_buf,np.uint32(M),np.uint32(N),np.uint32(F),C_buf,block = (32,32,1),grid = (np.uint32(M/32)+1,np.uint32(N/32)+1,1),shared=(M+2)*(N+2)*np.dtype(np.uint32).itemsize)
-# conv(A_buf,K_buf,np.uint32(M),np.uint32(N),np.uint32(F),C_buf,block = (3,3,1),grid = (np.uint32(M/3)+1,np.uint32(N/3)+1,1))
+unit_size = np.dtype(np.uint32).itemsize
+shared_mem = (M+2)*(N+2)*unit_size if (M <= 32) and (N <= 32) else 34*34*unit_size
+conv(A_buf,K_buf,np.uint32(M),np.uint32(N),np.uint32(F),C_buf,block = (32,32,1),grid = (np.uint32(M-1/32)+1,np.uint32(N-1/32)+1,1),shared=shared_mem)
 # conv(A_buf,K_buf,np.uint32(M),np.uint32(N),np.uint32(F),C_buf,block = (M,N,1),grid = (1,1,1),shared=(M+2)*(N+2)*np.dtype(np.uint32).itemsize)
 
 # copy data back from GPU
