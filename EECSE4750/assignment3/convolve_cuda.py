@@ -92,7 +92,7 @@ __global__ void convolve2d(unsigned int* A, unsigned int* K,
         // horizontal top block edges - CHECK!
             DS_A_PAD[threadIdx.x*(N_LIM+2)+(threadIdx.y+1)] = A[(i-1)*N + j];
         }
-        if ( threadIdx.x == M_LIM-1 && i != M-1 ) {
+        if ( threadIdx.x == M_LIM-1 && i != M-1) {
         // horizontal bottom block edges - CHECK!
             DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+(threadIdx.y+1)] = A[(i+1)*N + j];
         }
@@ -100,37 +100,35 @@ __global__ void convolve2d(unsigned int* A, unsigned int* K,
         // lower righthand corners (outside current block) - CHECK!
             DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+(threadIdx.y+2)] = A[(i+1)*N + (j+1)];
         }
-        if ( threadIdx.x == M_LIM-1 && threadIdx.y == 0 && j != 0 ) {
+        if ( threadIdx.x == M_LIM-1 && threadIdx.y == 0 && j != 0 && i < M-1 ) {
         // lower lefthand corners (outside current block) - CHECK!
             DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+threadIdx.y] = A[(i+1)*N + (j-1)];
         }
-        if ( threadIdx.x == 0 && threadIdx.y == N_LIM-1 && i != 0 ) {
+        if ( threadIdx.x == 0 && threadIdx.y == N_LIM-1 && i != 0 && j < N-1 ) {
         // upper righthand corners (outside current block) - CHECK!
             DS_A_PAD[threadIdx.x*(N_LIM+2)+(threadIdx.y+2)] = A[(i-1)*N + (j+1)];
         }
         if ( threadIdx.x == 0 && threadIdx.y == 0 && i != 0 && j != 0 ) {
         // upper lefthand corners (outside current block)
-            //DS_A_PAD[(threadIdx.x+1)*(N_LIM+2)+threadIdx.y] = A[i*N + (j-1)];
-            //DS_A_PAD[threadIdx.x*(N_LIM+2)+(threadIdx.y+1)] = A[(i-1)*N + j];
-            //DS_A_PAD[threadIdx.x*(N_LIM+2)+threadIdx.y] = A[(i-1)*N + (j-1)];
+            DS_A_PAD[threadIdx.x*(N_LIM+2)+threadIdx.y] = A[(i-1)*N + (j-1)];
         }
         // internal elements
           DS_A_PAD[(threadIdx.x+1)*(N_LIM+2)+(threadIdx.y+1)] = A[i*N + j];
 
         __syncthreads();
 
-        C[i*N + j] = DS_A_PAD[(threadIdx.x+1)*(N_LIM+2) + (threadIdx.y+1)];
-        //C[i*N + j] = i*N + j;
+        //C[i*N + j] = DS_A_PAD[(threadIdx.x+1)*(N_LIM+2) + (threadIdx.y+1)];
+        //C[i*N + j] = DS_A_PAD[6];
 
-        //// Convolution Calculation for element (i,j)
-        //C[i*N + j] = 0;
-        //for(unsigned int m = 0; m < F; m++){
-        //    for(unsigned int n = 0; n < F; n++){
-        //        //C[i*N + j] += K[m*F + n] * DS_A_PAD[((i+1)-m+1)*(N_LIM+2) +((j+1)-n+1)];
-        //        C[i*N + j] += K[m*F + n] * DS_A_PAD[((threadIdx.x+1)-m+1)*(N_LIM+2) +((threadIdx.y+1)-n+1)];
-        //        //C[i*N +j] = 0;
-        //    }
-        //}// end convolution calculation
+        // Convolution Calculation for element (i,j)
+        C[i*N + j] = 0;
+        for(unsigned int m = 0; m < F; m++){
+            for(unsigned int n = 0; n < F; n++){
+                //C[i*N + j] += K[m*F + n] * DS_A_PAD[((i+1)-m+1)*(N_LIM+2) +((j+1)-n+1)];
+                C[i*N + j] += K[m*F + n] * DS_A_PAD[((threadIdx.x+1)-m+1)*(N_LIM+2) +((threadIdx.y+1)-n+1)];
+                //C[i*N +j] = 0;
+            }
+        }// end convolution calculation
 
         __syncthreads();
 
@@ -143,15 +141,15 @@ __global__ void convolve2d(unsigned int* A, unsigned int* K,
 ##################################################
 
 # Configurations
-M = 33 #rows
-N = 33 #columns
+M = 66 #rows
+N = 65 #columns
 F = 3 #square dim of "kernel/filter"
 
 a = np.random.randint(0, 9, (M,N)).astype(np.uint32) #a is matrix which will be convolved
 
 # create an FxF filter of random numbers
-# f = np.random.randint(0, 9, (F,F)).astype(np.uint32) #f is kernel matrix
-f = np.ones((F,F)).astype(np.uint32) #f is kernel matrix
+f = np.random.randint(0, 9, (F,F)).astype(np.uint32) #f is kernel matrix
+# f = np.ones((F,F)).astype(np.uint32) #f is kernel matrix
 
 # mode='same' gives equal (unpadded) input size to OUTPUT size
 # boundary='fill' gives zeros around the input as padding
@@ -194,3 +192,4 @@ conv(A_buf,K_buf,np.uint32(M),np.uint32(N),np.uint32(F),C_buf,block = (32,32,1),
 # copy data back from GPU
 C_gpu = C_buf.get()
 print "c_gpu: \n", C_gpu
+print "c_gpu == c_cpu ? --> ", np.array_equal(C_gpu,c)
