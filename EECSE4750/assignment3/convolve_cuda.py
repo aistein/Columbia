@@ -222,6 +222,7 @@ def main(_M_=5, _N_=5, _F_=3):
     M = _M_ #rows
     N = _N_ #columns
     F = _F_ #square dim of "kernel/filter"
+    MAKE_PLOT = True
 
     a = np.random.randint(0,10, (M,N)).astype(np.int32) #a is matrix which will be convolved
 
@@ -270,6 +271,72 @@ def main(_M_=5, _N_=5, _F_=3):
 
     print "cpu_times: \n", cpu_times
     print "gpu_times: \n", gpu_times
+
+    if MAKE_PLOT:
+        import matplotlib as mpl
+        mpl.use('agg')
+        import matplotlib.pyplot as plt
+        px = list(xrange(len(cpu_times)))
+        cx = list(xrange(len(gpu_times)))
+        # cox = list(xrange(len(cuda_opt_times)))
+
+        plt.gcf()
+        plt.plot(px, cpu_times, color='r', label='python')
+        plt.plot(cx, gpu_times, color='g', label='CUDA')
+        # plt.plot(cox, cuda_opt_times, color='b', label='CUDA Optimized')
+        plt.xlabel('3x3 image * k, with 3x3 kernel')
+        plt.ylabel('time')
+        plt.legend(loc='upper left')
+        plt.title('Matrix Convolution: Python vs. CUDA')
+        plt.gca().set_xlim((min(px), max(px)))
+        plt.gca().set_ylim((min(cpu_times)/2, max(gpu_times)*1.2))
+        plt.savefig('cuda_scale_image.png')
+
+    print "====================== PART 3 =========================="
+    print "--------------------- PYTHON ---------------------------"
+    M = 300
+    N = 300
+    gpu_times = []
+    cpu_times = []
+    for K in range(3,32):
+        # fixed size of input
+        a = np.random.randint(0,10, (M,N)).astype(np.int32)
+
+        # scale size of kernel
+        F = K
+        f = np.random.randint(0, 10, (F,F)).astype(np.int32)
+
+        start = time.time()
+        c = conv2d(a, f, mode='same', boundary='fill')
+        runtime = time.time() - start
+        cpu_times.append(runtime)
+
+        runtime, c_gpu = test_instance(M,N,F,a,f,c)
+        gpu_times.append(runtime)
+
+    print "cpu_times: \n", cpu_times
+    print "gpu_times: \n", gpu_times
+
+    if MAKE_PLOT:
+        import matplotlib as mpl
+        mpl.use('agg')
+        import matplotlib.pyplot as plt
+        px = list(xrange(len(cpu_times)))
+        cx = list(xrange(len(gpu_times)))
+        # cox = list(xrange(len(cuda_opt_times)))
+
+        plt.gcf()
+        plt.plot(px, cpu_times, color='r', label='python')
+        plt.plot(cx, gpu_times, color='g', label='CUDA')
+        # plt.plot(cox, cuda_opt_times, color='b', label='CUDA Optimized')
+        plt.xlabel('3x3 image * k, with 3x3 kernel')
+        plt.ylabel('time')
+        plt.legend(loc='upper left')
+        plt.title('Matrix Convolution: Python vs. CUDA')
+        plt.gca().set_xlim((min(px), max(px)))
+        plt.gca().set_ylim((min(cpu_times)/2, max(gpu_times)*1.2))
+        plt.savefig('cuda_scale_kernel.png')
+
 
 if __name__ == '__main__':
 	main(300,300)
