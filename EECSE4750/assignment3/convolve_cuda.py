@@ -63,38 +63,66 @@ __global__ void convolve2d(int* A, int* K,
 
         // I (row) interior matrix boundary
         if ( i == M-1 ){
-            DS_A_PAD[(tx+2)*(N_LIM+2) + ty] = 0;
-            DS_A_PAD[(tx+2)*(N_LIM+2) + (ty+1)] = 0;
-            DS_A_PAD[(tx+2)*(N_LIM+2) + (ty+2)] = 0;
+            for(int z=1; z <= F/2; z++){
+                DS_A_PAD[(tx+F-z)*(N_LIM+F-1) + (ty+F/2-1)] = 0;
+                DS_A_PAD[(tx+F-z)*(N_LIM+F-1) + (ty+F/2)] = 0;
+                DS_A_PAD[(tx+F-z)*(N_LIM+F-1) + (ty+F/2+1)] = 0;
+            }
         } if ( i == 0 ){
-            DS_A_PAD[tx*(N_LIM+2) + ty] = 0;
-            DS_A_PAD[tx*(N_LIM+2) + (ty+1)] = 0;
-            DS_A_PAD[tx*(N_LIM+2) + (ty+2)] = 0;
+            for(int z=1; z <= F/2; z++){
+                DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1) + (ty+F/2-1)] = 0;
+                DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1) + (ty+F/2)] = 0;
+                DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1) + (ty+F/2+1)] = 0;
+            }
         }
 
         // J (col) interior matrix boundary
         if ( j == N-1 ){
-            DS_A_PAD[(tx+F/2-1)*(N_LIM+F-1) + (ty+F-1)] = 0;
-            DS_A_PAD[(tx+F/2)*(N_LIM+F-1) + (ty+F-1)] = 0;
-            DS_A_PAD[(tx+F/2+1)*(N_LIM+F-1) + (ty+F-1)] = 0;
+            for(int z=1; z <= F/2; z++){
+                DS_A_PAD[(tx+F/2-1)*(N_LIM+F-1) + (ty+F-z)] = 0;
+                DS_A_PAD[(tx+F/2)*(N_LIM+F-1) + (ty+F-z)] = 0;
+                DS_A_PAD[(tx+F/2+1)*(N_LIM+F-1) + (ty+F-z)] = 0;
+            }
         } if ( j == 0 ){
-            DS_A_PAD[(tx+F/2-1)*(N_LIM+F-1) + ty] = 0;
-            DS_A_PAD[(tx+F/2)*(N_LIM+F-1) + ty] = 0;
-            DS_A_PAD[(tx+F/2+1)*(N_LIM+F-1) + ty] = 0;
+            for(int z=1; z <=F/2; z++){
+                DS_A_PAD[(tx+F/2-1)*(N_LIM+F-1) + (ty+F/2-z)] = 0;
+                DS_A_PAD[(tx+F/2)*(N_LIM+F-1) + (ty+F/2-z)] = 0;
+                DS_A_PAD[(tx+F/2+1)*(N_LIM+F-1) + (ty+F/2-z)] = 0;
+            }
         }
 
         // Matrix Corner boundaries
         if (i == 0 && j == 0){
-            DS_A_PAD[0] = 0;
+        // upper left
+            for(int q=1; q <= F/2; q++){
+                for(int z=0; z <= F/2; z++){
+                    DS_A_PAD[z*(N_LIM+F-1)+q] = 0;
+                }
+            }
         }
         else if (i == M-1 && j == 0){
-            DS_A_PAD[(tx+F/2)*N_LIM] = 0;
+        // lower left
+            for(int q=1; q <= F/2; q++){
+                for(int z=0; z <= F/2; z++){
+                    DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1)+q] = 0;
+                }
+            }
         }
         else if (i == 0 && j == N-1){
-            DS_A_PAD[ty+F/2] = 0;
+        // upper right
+            for(int q=1; q <= F/2; q++){
+                for(int z=0; z <= F/2; z++){
+                    DS_A_PAD[z*(N_LIM+F-1) + (ty+q)] = 0;
+                }
+            }
         }
         else if (i == M-1 && j == N-1){
-            DS_A_PAD[(tx+F/2)*N_LIM + (ty+F/2)] = 0;
+        // lower right
+            for(int q=1; q <= F/2; q++){
+                for(int z=0; z <= F/2; z++){
+                    DS_A_PAD[(tx+z+1)*(N_LIM+F-1) + (ty+q+1)] = 0;
+                }
+            }
         }
 
         __syncthreads();
@@ -108,42 +136,74 @@ __global__ void convolve2d(int* A, int* K,
 
         if ( left && j != 0 ) {
         // vertical left block edges - CHECK!
-            DS_A_PAD[(tx+F/2)*(N_LIM+F-1)+ty] = A[i*N + (j-1)];
+            for(int z=1; z <= F/2; z++){
+                DS_A_PAD[(tx+F/2)*(N_LIM+F-1)+(ty+F/2-z)] = A[i*N + (j-z)];
+            }
         }
 
         if ( right && j != N-1 ) {
-        // veritcal right block edges - CHECK!
-            DS_A_PAD[(tx+F/2)*(N_LIM+F-1)+(ty+F/2+1)] = A[i*N + (j+1)];
+        // veritcal right block edges - WATCH!
+            for(int z=1; z <= F/2; z++){
+                if ((j+z) < N){
+                    DS_A_PAD[(tx+F/2)*(N_LIM+F-1)+(ty+F/2+z)] = A[i*N + (j+z)];
+                }
+            }
         }
 
         if ( top && i != 0 ) {
         // horizontal top block edges - CHECK!
-            DS_A_PAD[tx*(N_LIM+F-1)+(ty+F/2)] = A[(i-1)*N + j];
+            for(int z=1; z <= F/2; z++){
+                DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1)+(ty+F/2)] = A[(i-z)*N + j];
+            }
         }
 
         if ( bottom && i != M-1) {
-        // horizontal bottom block edges - CHECK!
-            DS_A_PAD[(tx+F/2+1)*(N_LIM+F-1)+(ty+F/2)] = A[(i+1)*N + j];
+        // horizontal bottom block edges - WATCH!
+            for(int z=1; z <= F/2; z++){
+                if ((i+z) < M){
+                    DS_A_PAD[(tx+F/2+z)*(N_LIM+F-1)+(ty+F/2)] = A[(i+z)*N + j];
+                }
+            }
         }
 
         if ( bottom && right && j != N-1 && i != M-1 ) {
-        // lower righthand block corners (outside current block) - CHECK!
-            DS_A_PAD[(tx+F/2+1)*(N_LIM+F-1)+(ty+F/2+1)] = A[(i+1)*N + (j+1)];
+        // lower righthand block corners (outside current block) - WATCH!
+            for(int q=1; q <= F/2; q++){
+                for(int z=1; z <= F/2; z++){
+                    if((i+z) < M && (j+q) < N){
+                        DS_A_PAD[(tx+F/2+z)*(N_LIM+F-1)+(ty+F/2+q)] = A[(i+z)*N + (j+q)];
+                    }
+                }
+            }
         }
 
         if ( bottom && left && j != 0 && i < M-1 ) {
-        // lower lefthand block corners (outside current block) - CHECK!
-            DS_A_PAD[(tx+F/2+1)*(N_LIM+F-1)+(ty+F/2-1)] = A[(i+1)*N + (j-1)];
+        // lower lefthand block corners (outside current block) - WATCH!
+            for(int q=1; q <= F/2; q++){
+                for(int z=1; z <= F/2; z++){
+                    if((i+z) < M && (j+q) >= 0){
+                        DS_A_PAD[(tx+F/2+z)*(N_LIM+F-1)+(ty+F/2-q)] = A[(i+z)*N + (j-q)];
+                    }
+                }
+            }
         }
 
         if ( top && right && i != 0 && j < N-1 ) {
-        // upper righthand block corners (outside current block) - CHECK!
-            DS_A_PAD[(tx+F/2-1)*(N_LIM+F-1)+(ty+F/2+1)] = A[(i-1)*N + (j+1)];
+        // upper righthand block corners (outside current block) - WATCH!
+            for(int q=1; q <= F/2; q++){
+                for(int z=1; z <= F/2; z++){
+                    DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1)+(ty+F/2+q)] = A[(i-z)*N + (j+q)];
+                }
+            }
         }
 
         if ( top && left && i != 0 && j != 0 ) {
         // upper lefthand block corners (outside current block)
-            DS_A_PAD[(tx+F/2-1)*(N_LIM+2)+(ty+F/2-1)] = A[(i-1)*N + (j-1)];
+            for(int q=1; q <= F/2; q++){
+                for(int z=1; z <= F/2; z++){
+                    DS_A_PAD[(tx+F/2-z)*(N_LIM+2)+(ty+F/2-q)] = A[(i-z)*N + (j-q)];
+                }
+            }
         }
 
         // internal elements
@@ -210,7 +270,7 @@ def test_instance(M,N,F,a,f,c):
 ## MAIN
 ##################################################
 
-def main(_M_=5, _N_=5, _F_=3):
+def main(_M_=5, _N_=5, _F_=7):
     # Configurations
     M = _M_ #rows
     N = _N_ #columns
