@@ -6,7 +6,7 @@ Matrix Convolution in PyCUDA
 """
 
 import numpy as np
-np.set_printoptions(threshold=np.nan)
+# np.set_printoptions(threshold=np.nan)
 #import PYCUDA modules and libraries
 from pycuda import driver, compiler, gpuarray, tools
 import sys
@@ -177,81 +177,99 @@ __global__ void convolve2d(int* A, int* K,
 ##Python Code starts here
 ##################################################
 
-# Configurations
-M = 69 #rows
-N = 69 #columns
-F = 3 #square dim of "kernel/filter"
+## test_instance - runs through a single iteration of the convolution test
+def test_instance(M,N,F,a,f,c):
 
-a = np.random.randint(0,10, (M,N)).astype(np.int32) #a is matrix which will be convolved
+    # get the kernel code from the template
+    kernel_code = kernel_code_template
 
-# create an FxF filter of random numbers
-# f = np.random.randint(-1, 5, (F,F)).astype(np.int32) #f is kernel matrix
-# f = np.ones((F,F)).astype(np.int32) #f is kernel matrix
-f = np.array([[-1., -2. , -1.], [0., 0., 0.], [1., 2., 1.]]).astype(np.int32)
+    # compile the kernel code, with options
+    TILE_M = str(M) + 'u' if (M <= 32) else str(32) + 'u'
+    TILE_N = str(N) + 'u' if (N <= 32) else str(32) + 'u'
+    options = "-DTILE_M=" + TILE_M + " -DTILE_N=" + TILE_N
+    OPTIONS = [_flag.strip() for _flag in options.split() if _flag.strip()]
+    # print OPTIONS
+    mod = compiler.SourceModule(kernel_code,options=OPTIONS)
 
-# mode='same' gives equal (unpadded) input size to OUTPUT size
-# boundary='fill' gives zeros around the input as padding
-c = conv2d(a, f, mode='same', boundary='fill')
+    # get the kernel function from the compiled module
+    conv = mod.get_function("convolve2d")
 
-print "====================== PART 1 =========================="
-print "--------------------- PYTHON ---------------------------"
-print "a: \n", a
-print "f: \n", f
-print "c: \n", c
+    # create buffers for transfer into GPU
+    A_buf = gpuarray.to_gpu(a)
+    K_buf = gpuarray.to_gpu(f)
+    C_buf = gpuarray.empty((M,N),a.dtype)
+    C_gpu = np.empty((M,N),a.dtype)
 
-print "----------------------- CUDA ----------------------------"
+    # call to conv
+    unit_size = np.dtype(np.int32).itemsize
+    shared_mem = (M+2)*(N+2)*unit_size if (M <= 32) and (N <= 32) else 34*34*unit_size
 
-# get the kernel code from the template
-kernel_code = kernel_code_template
+    start = time.time()
+    conv(A_buf,K_buf,np.int32(M),np.int32(N),np.int32(F),C_buf,block = (32,32,1),grid = (np.int32(M-1/32)+1,np.int32(N-1/32)+1,1),shared=shared_mem)
+    gpu_runtime = time.time() - start
 
-# compile the kernel code, with options
-TILE_M = str(M) + 'u' if (M <= 32) else str(32) + 'u'
-TILE_N = str(N) + 'u' if (N <= 32) else str(32) + 'u'
-options = "-DTILE_M=" + TILE_M + " -DTILE_N=" + TILE_N
-OPTIONS = [_flag.strip() for _flag in options.split() if _flag.strip()]
-print OPTIONS
-mod = compiler.SourceModule(kernel_code,options=OPTIONS)
+    # copy data back from GPU
+    C_gpu = C_buf.get()
 
-# get the kernel function from the compiled module
-conv = mod.get_function("convolve2d")
+    return gpu_runtime, C_gpu
 
-# create buffers for transfer into GPU
-A_buf = gpuarray.to_gpu(a)
-K_buf = gpuarray.to_gpu(f)
-C_buf = gpuarray.empty((M,N),a.dtype)
-C_gpu = np.empty((M,N),a.dtype)
+##################################################
+## MAIN
+##################################################
 
-# D_buf = gpuarray.empty((M+2,N+2), a.dtype)
-# D_gpu = np.empty((M+2,N+2),a.dtype)
+def main(_M_=5, _N_=5, _F_=3):
+    # Configurations
+    M = _M_ #rows
+    N = _N_ #columns
+    F = _F_ #square dim of "kernel/filter"
 
-# call to conv
-unit_size = np.dtype(np.int32).itemsize
-shared_mem = (M+2)*(N+2)*unit_size if (M <= 32) and (N <= 32) else 34*34*unit_size
-conv(A_buf,K_buf,np.int32(M),np.int32(N),np.int32(F),C_buf,block = (32,32,1),grid = (np.int32(M-1/32)+1,np.int32(N-1/32)+1,1),shared=shared_mem)
+    a = np.random.randint(0,10, (M,N)).astype(np.int32) #a is matrix which will be convolved
 
-# copy data back from GPU
-C_gpu = C_buf.get()
-# D_gpu = D_buf.get()
-print "c_gpu: \n", C_gpu
-print "c_gpu == c_cpu ? --> ", np.array_equal(C_gpu,c)
-for i in range(M):
-    for j in range(N):
-        if C_gpu[i][j] != c[i][j] :
-            print "element[" + str(i) + "][" + str(j) + "] isn't matching"
-            print "C_gpu["+str(i)+"]["+str(j)+"] = ", C_gpu[i][j]
-            print "c[i][j] =", c[i][j]
-            for p in range(3):
-                for q in range(3):
-                    print a[i-1+p][j-1+q]
+    # create an FxF filter of random numbers
+    # f = np.random.randint(-1, 5, (F,F)).astype(np.int32) #f is kernel matrix
+    # f = np.ones((F,F)).astype(np.int32) #f is kernel matrix
+    f = np.array([[-1., -2. , -1.], [0., 0., 0.], [1., 2., 1.]]).astype(np.int32)
 
-# print "d_gpu: \n", D_gpu
-# for i in range(M+2):
-#     for j in range(N+2):
-#         if (i < M and j < N) and (i > 0 and j > 0):
-#             if D_gpu[i][j] != a[i-1][j-1] :
-#                 print "element[" + str(i) + "][" + str(j) + "] isn't matching"
-#                 print "D_gpu["+str(i)+"]["+str(j)+"] = ", D_gpu[i][j]
-#                 print "a[i-1][j-1] =", a[i-1][j-1]
-#         elif (i >= M or j >= N) and (i < M+2 and j < N+2) and (D_gpu[i][j] != 0) :
-#             print "element[" + str(i) + "][" + str(j) + "] isn't zero!"
-#             print "D_gpu["+str(i)+"]["+str(j)+"] = ", D_gpu[i][j]
+    # mode='same' gives equal (unpadded) input size to OUTPUT size
+    # boundary='fill' gives zeros around the input as padding
+    start = time.time()
+    c = conv2d(a, f, mode='same', boundary='fill')
+    runtime = time.time() - start
+
+    print "====================== PART 1 =========================="
+    print "--------------------- PYTHON ---------------------------"
+    print "a: \n", a
+    print "f: \n", f
+    print "c: \n", c
+    print "c runtime: ", runtime
+
+    print "----------------------- CUDA ----------------------------"
+    runtime, c_gpu = test_instance(M,N,F,a,f,c)
+
+    print "c_gpu: \n", c_gpu
+    print "c_gpu time: ", runtime
+    print "c_gpu == c_cpu ? --> ", np.array_equal(c_gpu,c)
+
+    print "====================== PART 2 =========================="
+    print "--------------------- PYTHON ---------------------------"
+    M = 3
+    N = 3
+    gpu_times = []
+    cpu_times = []
+    for K in range(1,100):
+        # scale size of input by K (filter remains same as above, constant)
+        a = np.random.randint(0,10, (M*K,N*K)).astype(np.int32)
+
+        start = time.time()
+        c = conv2d(a, f, mode='same', boundary='fill')
+        runtime = time.time() - start
+        cpu_times.append(runtime)
+
+        runtime, c_gpu = test_instance(M*K,N*K,F,a,f,c)
+        gpu_times.append(runtime)
+
+    print "cpu_times: \n", cpu_times
+    print "gpu_times: \n", gpu_times
+
+if __name__ == '__main__':
+	main(300,300)
