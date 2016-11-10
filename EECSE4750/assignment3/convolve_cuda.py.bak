@@ -25,6 +25,149 @@ import pycuda.autoinit
 ##CUDA KERNEL
 ############################
 
+        # //// ZERO PADDING - comes before fill so as not to overwrite
+        #
+        # // I (row) interior matrix boundary
+        # if ( i == M-1 ){
+        #     DS_A[(tx+2)*(N_LIM+F-1) + ty] = 0;
+        #     DS_A[(tx+2)*(N_LIM+F-1) + (ty+1)] = 0;
+        #     DS_A[(tx+2)*(N_LIM+F-1) + (ty+2)] = 0;
+        # } if ( i == 0 ){
+        #     DS_A[tx*(N_LIM+2) + ty] = 0;
+        #     DS_A[tx*(N_LIM+2) + (ty+1)] = 0;
+        #     DS_A[tx*(N_LIM+2) + (ty+2)] = 0;
+        # }
+        #
+        # // Matrix Corner boundaries
+        # if (i == 0 && j == 0){
+        #     DS_A[0] = 0;
+        # }
+        # else if (i == M-1 && j == 0){
+        #     DS_A[(tx+1)*N_LIM] = 0;
+        # }
+        # else if (i == 0 && j == N-1){
+        #     DS_A[ty+1] = 0;
+        # }
+        # else if (i == M-1 && j == N-1){
+        #     DS_A[(tx+1)*N_LIM + (ty+1)] = 0;
+        # }
+        #
+        # __syncthreads();
+
+        # // J (col) interior matrix boundary
+        # if ( j == N-1 ){
+        #     DS_A[tx*(N_LIM+2) + (ty+2)] = 0;
+        #     DS_A[(tx+1)*(N_LIM+2) + (ty+2)] = 0;
+        #     DS_A[(tx+2)*(N_LIM+2) + (ty+2)] = 0;
+        # } if ( j == 0 ){
+        #     DS_A[tx*(N_LIM+2) + ty] = 0;
+        #     DS_A[(tx+1)*(N_LIM+2) + ty] = 0;
+        #     DS_A[(tx+2)*(N_LIM+2) + ty] = 0;
+        # }
+
+        # //// FILL VALUES OF DS_A
+        #
+        # bool left = ( ty == 0 ) ? true : false;
+        # bool right = ( ty == N_LIM-1 ) ? true : false;
+        # bool top = ( tx == 0 ) ? true : false;
+        # bool bottom = ( tx == M_LIM-1 ) ? true : false;
+        #
+        # if ( left && j != 0 ) {
+        # // vertical left block edges - CHECK!
+        #     for(int z=1; z<F/2; z++){
+        #         DS_A[tx*(N_LIM+F/2)+(ty-z)] = A[i*N + (j-z)];
+        #     }
+        # }
+        #
+        # if ( right && j != N-1 ) {
+        # // veritcal right block edges - CHECK!
+        #     for(int z=1; z<F/2; z++){
+        #         DS_A[tx*(N_LIM+F/2)+(ty+z)] = A[i*N + (j+z)];
+        #     }
+        # }
+        #
+        # if ( top && i != 0 ) {
+        # // horizontal top block edges - CHECK!
+        #     for(int z=1; z<F/2; z++){
+        #         DS_A[(tx-z)*(N_LIM+F/2)+ty] = A[(i-z)*N + j];
+        #     }
+        # }
+        #
+        # if ( bottom && i != M-1) {
+        # // horizontal bottom block edges - CHECK!
+        #     for(int z=1; z<F/2; z++){
+        #         DS_A[(tx+z)*(N_LIM+F/2)+ty] = A[(i+z)*N + j];
+        #     }
+        # }
+        #
+        # if ( bottom && right && j != N-1 && i != M-1 ) {
+        # // lower righthand block corners (outside current block) - CHECK!
+        #     DS_A[(tx+2)*(N_LIM+2)+(ty+2)] = A[(i+1)*N + (j+1)];
+        # }
+        #
+        # if ( bottom && left && j != 0 && i < M-1 ) {
+        # // lower lefthand block corners (outside current block) - CHECK!
+        #     DS_A[(tx+2)*(N_LIM+2)+ty] = A[(i+1)*N + (j-1)];
+        # }
+        #
+        # if ( top && right && i != 0 && j < N-1 ) {
+        # // upper righthand block corners (outside current block) - CHECK!
+        #     DS_A[tx*(N_LIM+2)+(ty+2)] = A[(i-1)*N + (j+1)];
+        # }
+        #
+        # if ( top && left && i != 0 && j != 0 ) {
+        # // upper lefthand block corners (outside current block)
+        #     DS_A[tx*(N_LIM+2)+ty] = A[(i-1)*N + (j-1)];
+        # }
+
+        # if ( left && j != 0 ) {
+        # // vertical left block edges - CHECK!
+        #     for(int z=1; z<F/2; z++){
+        #         DS_A[tx*(N_LIM+F/2)+(ty-z)] = A[i*N + (j-z)];
+        #     }
+        # }
+        #
+        # if ( right && j != N-1 ) {
+        # // veritcal right block edges - CHECK!
+        #     for(int z=1; z<F/2; z++){
+        #         DS_A[tx*(N_LIM+F/2)+(ty+z)] = A[i*N + (j+z)];
+        #     }
+        # }
+        #
+        # if ( top && i != 0 ) {
+        # // horizontal top block edges - CHECK!
+        #     for(int z=1; z<F/2; z++){
+        #         DS_A[(tx-z)*(N_LIM+F/2)+ty] = A[(i-z)*N + j];
+        #     }
+        # }
+        #
+        # if ( bottom && i != M-1) {
+        # // horizontal bottom block edges - CHECK!
+        #     for(int z=1; z<F/2; z++){
+        #         DS_A[(tx+z)*(N_LIM+F/2)+ty] = A[(i+z)*N + j];
+        #     }
+        # }
+
+        # if ( bottom && right && j != N-1 && i != M-1 ) {
+        # // lower righthand block corners (outside current block) - CHECK!
+        #     DS_A[(tx+2)*(N_LIM+2)+(ty+2)] = A[(i+1)*N + (j+1)];
+        # }
+        #
+        # if ( bottom && left && j != 0 && i < M-1 ) {
+        # // lower lefthand block corners (outside current block) - CHECK!
+        #     DS_A[(tx+2)*(N_LIM+2)+ty] = A[(i+1)*N + (j-1)];
+        # }
+        #
+        # if ( top && right && i != 0 && j < N-1 ) {
+        # // upper righthand block corners (outside current block) - CHECK!
+        #     DS_A[tx*(N_LIM+2)+(ty+2)] = A[(i-1)*N + (j+1)];
+        # }
+        #
+        # if ( top && left && i != 0 && j != 0 ) {
+        # // upper lefthand block corners (outside current block)
+        #     DS_A[tx*(N_LIM+2)+ty] = A[(i-1)*N + (j-1)];
+        # }
+
 kernel_code_template = """
 //2D Convolution function
 __global__ void convolve2d(int* A, int* K,
@@ -53,7 +196,6 @@ __global__ void convolve2d(int* A, int* K,
 
     if(i < M && j <  N){
     // check to make sure we are within bounds of the overall output size
-
         // create flattened padded matrix size M+2 x N+2 to use for convolution input
         extern __shared__ int DS_A_PAD[];
         int M_LIM = (M > 32) ? ((blockIdx.x+1)*blockDim.x < M) ? blockDim.x : blockDim.x - (blockIdx.x+1)*blockDim.x % M : M;
@@ -74,13 +216,13 @@ __global__ void convolve2d(int* A, int* K,
 
         // J (col) interior matrix boundary
         if ( j == N-1 ){
-            DS_A_PAD[(tx+F/2-1)*(N_LIM+F-1) + (ty+F-1)] = 0;
-            DS_A_PAD[(tx+F/2)*(N_LIM+F-1) + (ty+F-1)] = 0;
-            DS_A_PAD[(tx+F/2+1)*(N_LIM+F-1) + (ty+F-1)] = 0;
+            DS_A_PAD[tx*(N_LIM+2) + (ty+2)] = 0;
+            DS_A_PAD[(tx+1)*(N_LIM+2) + (ty+2)] = 0;
+            DS_A_PAD[(tx+2)*(N_LIM+2) + (ty+2)] = 0;
         } if ( j == 0 ){
-            DS_A_PAD[(tx+F/2-1)*(N_LIM+F-1) + ty] = 0;
-            DS_A_PAD[(tx+F/2)*(N_LIM+F-1) + ty] = 0;
-            DS_A_PAD[(tx+F/2+1)*(N_LIM+F-1) + ty] = 0;
+            DS_A_PAD[tx*(N_LIM+2) + ty] = 0;
+            DS_A_PAD[(tx+1)*(N_LIM+2) + ty] = 0;
+            DS_A_PAD[(tx+2)*(N_LIM+2) + ty] = 0;
         }
 
         // Matrix Corner boundaries
@@ -88,13 +230,13 @@ __global__ void convolve2d(int* A, int* K,
             DS_A_PAD[0] = 0;
         }
         else if (i == M-1 && j == 0){
-            DS_A_PAD[(tx+F/2)*N_LIM] = 0;
+            DS_A_PAD[(tx+1)*N_LIM] = 0;
         }
         else if (i == 0 && j == N-1){
-            DS_A_PAD[ty+F/2] = 0;
+            DS_A_PAD[ty+1] = 0;
         }
         else if (i == M-1 && j == N-1){
-            DS_A_PAD[(tx+F/2)*N_LIM + (ty+F/2)] = 0;
+            DS_A_PAD[(tx+1)*N_LIM + (ty+1)] = 0;
         }
 
         __syncthreads();
@@ -108,55 +250,47 @@ __global__ void convolve2d(int* A, int* K,
 
         if ( left && j != 0 ) {
         // vertical left block edges - CHECK!
-            DS_A_PAD[(tx+F/2)*(N_LIM+F-1)+ty] = A[i*N + (j-1)];
+            DS_A_PAD[(tx+1)*(N_LIM+2)+ty] = A[i*N + (j-1)];
         }
-
         if ( right && j != N-1 ) {
         // veritcal right block edges - CHECK!
-            DS_A_PAD[(tx+F/2)*(N_LIM+F-1)+(ty+F/2+1)] = A[i*N + (j+1)];
+            DS_A_PAD[(tx+1)*(N_LIM+2)+(ty+2)] = A[i*N + (j+1)];
         }
-
         if ( top && i != 0 ) {
         // horizontal top block edges - CHECK!
-            DS_A_PAD[tx*(N_LIM+F-1)+(ty+F/2)] = A[(i-1)*N + j];
+            DS_A_PAD[tx*(N_LIM+2)+(ty+1)] = A[(i-1)*N + j];
         }
-
         if ( bottom && i != M-1) {
         // horizontal bottom block edges - CHECK!
-            DS_A_PAD[(tx+F/2+1)*(N_LIM+F-1)+(ty+F/2)] = A[(i+1)*N + j];
+            DS_A_PAD[(tx+2)*(N_LIM+2)+(ty+1)] = A[(i+1)*N + j];
         }
-
         if ( bottom && right && j != N-1 && i != M-1 ) {
         // lower righthand block corners (outside current block) - CHECK!
-            DS_A_PAD[(tx+F/2+1)*(N_LIM+F-1)+(ty+F/2+1)] = A[(i+1)*N + (j+1)];
+            DS_A_PAD[(tx+2)*(N_LIM+2)+(ty+2)] = A[(i+1)*N + (j+1)];
         }
-
         if ( bottom && left && j != 0 && i < M-1 ) {
         // lower lefthand block corners (outside current block) - CHECK!
-            DS_A_PAD[(tx+F/2+1)*(N_LIM+F-1)+(ty+F/2-1)] = A[(i+1)*N + (j-1)];
+            DS_A_PAD[(tx+2)*(N_LIM+2)+ty] = A[(i+1)*N + (j-1)];
         }
-
         if ( top && right && i != 0 && j < N-1 ) {
         // upper righthand block corners (outside current block) - CHECK!
-            DS_A_PAD[(tx+F/2-1)*(N_LIM+F-1)+(ty+F/2+1)] = A[(i-1)*N + (j+1)];
+            DS_A_PAD[tx*(N_LIM+2)+(ty+2)] = A[(i-1)*N + (j+1)];
         }
-
         if ( top && left && i != 0 && j != 0 ) {
         // upper lefthand block corners (outside current block)
-            DS_A_PAD[(tx+F/2-1)*(N_LIM+2)+(ty+F/2-1)] = A[(i-1)*N + (j-1)];
+            DS_A_PAD[tx*(N_LIM+2)+ty] = A[(i-1)*N + (j-1)];
         }
 
         // internal elements
-            DS_A_PAD[(tx+F/2)*(N_LIM+F-1)+(ty+F/2)] = A[i*N + j];
+            DS_A_PAD[(tx+1)*(N_LIM+2)+(ty+1)] = A[i*N + j];
 
         __syncthreads();
 
         //// CONVOLUTION Calculation for element (i,j)
-
         C[i*N + j] = 0;
         for(int m = 0; m < F; m++){
             for(int n = 0; n < F; n++){
-                C[i*N + j] += K[m*F + n] * DS_A_PAD[(tx-m+F-1)*(N_LIM+F-1) +(ty-n+F-1)];
+                C[i*N + j] += K[m*F + n] * DS_A_PAD[((tx+1)-m+1)*(N_LIM+2) +((ty+1)-n+1)];
             }
         }// end convolution calculation
 
@@ -195,7 +329,7 @@ def test_instance(M,N,F,a,f,c):
 
     # call to conv
     unit_size = np.dtype(np.int32).itemsize
-    shared_mem = (M+F-1)*(N+F-1)*unit_size if (M <= 32) and (N <= 32) else (32+F-1)*(32+F-1)*unit_size
+    shared_mem = (M+F/2-1)*(N+F/2-1)*unit_size if (M <= 32) and (N <= 32) else (32+F/2)*(32+F/2)*unit_size
 
     start = time.time()
     conv(A_buf,K_buf,np.int32(M),np.int32(N),np.int32(F),C_buf,block = (32,32,1),grid = (np.int32(M-1/32)+1,np.int32(N-1/32)+1,1),shared=shared_mem)
@@ -217,10 +351,10 @@ def main(_M_=5, _N_=5, _F_=3):
     F = _F_ #square dim of "kernel/filter"
     MAKE_PLOT = True
 
-    a = np.random.randint(0,10, (M,N)).astype(np.int32) #a is matrix which will be convolved
+    a = np.random.randint(0,5, (M,N)).astype(np.int32) #a is matrix which will be convolved
 
     # create an FxF filter of random numbers
-    # f = np.random.randint(-1, 5, (F,F)).astype(np.int32) #f is kernel matrix
+    # f = np.random.randint(0, 10, (F,F)).astype(np.int32) #f is kernel matrix
     f = np.ones((F,F)).astype(np.int32) #f is kernel matrix
     # f = np.array([[-1., -2. , -1.], [0., 0., 0.], [1., 2., 1.]]).astype(np.int32)
 
@@ -291,7 +425,7 @@ def main(_M_=5, _N_=5, _F_=3):
     # N = 300
     # gpu_times = []
     # cpu_times = []
-    # for K in range(3,32):
+    # for K in range(3,31,2):
     #     # fixed size of input
     #     a = np.random.randint(0,10, (M,N)).astype(np.int32)
     #
@@ -330,6 +464,5 @@ def main(_M_=5, _N_=5, _F_=3):
     #     plt.gca().set_ylim((min(cpu_times)/2, max(gpu_times)*1.2))
     #     plt.savefig('cuda_scale_kernel.png')
 
-
 if __name__ == '__main__':
-	main(330,330)
+	main(15,15)
