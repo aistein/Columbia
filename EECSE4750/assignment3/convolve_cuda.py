@@ -189,10 +189,14 @@ __global__ void convolve2d(int* A, int* K,
         }
 
         if ( top && right && i != 0 && j < N-1 ) {
-        // upper righthand block corners (outside current block) - WATCH!
+        // upper righthand block corners (outside current block) - CHECK!
             for(int q=1; q <= F/2; q++){
                 for(int z=1; z <= F/2; z++){
-                    DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1)+(ty+F/2+q)] = A[(i-z)*N + (j+q)];
+                    if((i-z) >= M || (j+q) >= N){
+                        DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1)+(ty+F/2+q)] = 0;
+                    } else {
+                        DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1)+(ty+F/2+q)] = A[(i-z)*N + (j+q)];
+                    }
                 }
             }
         }
@@ -201,7 +205,7 @@ __global__ void convolve2d(int* A, int* K,
         // upper lefthand block corners (outside current block)
             for(int q=1; q <= F/2; q++){
                 for(int z=1; z <= F/2; z++){
-                    DS_A_PAD[(tx+F/2-z)*(N_LIM+2)+(ty+F/2-q)] = A[(i-z)*N + (j-q)];
+                    DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1)+(ty+F/2-q)] = A[(i-z)*N + (j-q)];
                 }
             }
         }
@@ -210,6 +214,8 @@ __global__ void convolve2d(int* A, int* K,
             DS_A_PAD[(tx+F/2)*(N_LIM+F-1)+(ty+F/2)] = A[i*N + j];
 
         __syncthreads();
+
+        //C[i*N+j] = DS_A_PAD[(tx+F/2-2)*(N_LIM+F-1) + (ty + F/2-2)];
 
         //// CONVOLUTION Calculation for element (i,j)
 
@@ -270,7 +276,7 @@ def test_instance(M,N,F,a,f,c):
 ## MAIN
 ##################################################
 
-def main(_M_=5, _N_=5, _F_=7):
+def main(_M_=5, _N_=5, _F_=5):
     # Configurations
     M = _M_ #rows
     N = _N_ #columns
@@ -304,6 +310,18 @@ def main(_M_=5, _N_=5, _F_=7):
     print "c_gpu time: ", runtime
     print "c_gpu == c_cpu ? --> ", np.array_equal(c_gpu,c)
 
+    for i in range(M):
+        for j in range(N):
+            if c_gpu[i][j] != c[i][j] :
+                print "element[" + str(i) + "][" + str(j) + "] isn't matching"
+                print "C_gpu["+str(i)+"]["+str(j)+"] = ", c_gpu[i][j]
+                print "c[i][j] =", c[i][j]
+                for p in range(5):
+                    for q in range(5):
+                        if (i-2+p >= M or j-2+q >= N):
+                            print "x"
+                        else:
+                            print a[i-2+p][j-2+q]
     # print "====================== PART 2 =========================="
     # print "--------------------- PYTHON ---------------------------"
     # M = 3
@@ -392,4 +410,4 @@ def main(_M_=5, _N_=5, _F_=7):
 
 
 if __name__ == '__main__':
-	main(330,330)
+	main(65,65)
