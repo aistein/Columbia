@@ -42,12 +42,71 @@ import pycuda.autoinit
         # }
         # // internal elements
 
+                # if ( threadIdx.y == 0 && j != 0 ) {
+                # // vertical left block edges - CHECK!
+                #     DS_A_PAD[(threadIdx.x+1)*(N_LIM+2)+threadIdx.y] = A[i*N + (j-1)];
+                # } if ( threadIdx.y == 0 && j == 0 ) {
+                #     DS_A_PAD[(threadIdx.x+1)*(N_LIM+2)+threadIdx.y] = 0;
+                # }
+                #
+                # if ( threadIdx.y == N_LIM-1 && j != N-1 ) {
+                # // veritcal right block edges - CHECK!
+                #     DS_A_PAD[(threadIdx.x+1)*(N_LIM+2)+(threadIdx.y+2)] = A[i*N + (j+1)];
+                # } if ( threadIdx.y == N_LIM-1 && j == N-1 ) {
+                #     DS_A_PAD[(threadIdx.x+1)*(N_LIM+2)+(threadIdx.y+2)] = 0;
+                # }
+                #
+                # if ( threadIdx.x == 0 && i != 0 ) {
+                # // horizontal top block edges - CHECK!
+                #     DS_A_PAD[threadIdx.x*(N_LIM+2)+(threadIdx.y+1)] = A[(i-1)*N + j];
+                # } if ( threadIdx.x == 0 && i == 0 ) {
+                #     DS_A_PAD[threadIdx.x*(N_LIM+2)+(threadIdx.y+1)] = 0;
+                #     //DS_A_PAD[threadIdx.x*(N_LIM+2)+(threadIdx.y+2)] = 0;
+                # }
+                #
+                # if ( threadIdx.x == M_LIM-1 && i != M-1) {
+                # // horizontal bottom block edges - CHECK!
+                #     DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+(threadIdx.y+1)] = A[(i+1)*N + j];
+                # } if ( threadIdx.x == M_LIM-1 && i == M-1 ) {
+                #     DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+(threadIdx.y+1)] = 0;
+                # }
+                #
+                # if ( threadIdx.x == M_LIM-1 && threadIdx.y == N_LIM-1 && j != N-1 && i != M-1 ) {
+                # // lower righthand corners (outside current block) - CHECK!
+                #     DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+(threadIdx.y+2)] = A[(i+1)*N + (j+1)];
+                # } if ( threadIdx.x == M_LIM-1 && threadIdx.y == N_LIM-1 && j == N-1 && i == M-1 ) {
+                #     DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+(threadIdx.y+2)] = 0;
+                # }
+                #
+                # if ( threadIdx.x == M_LIM-1 && threadIdx.y == 0 && j != 0 && i < M-1 ) {
+                # // lower lefthand corners (outside current block) - CHECK!
+                #     DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+threadIdx.y] = A[(i+1)*N + (j-1)];
+                # } if ( threadIdx.x == M_LIM-1 && threadIdx.y == 0 && i == M-1 ) { // removed j == 0
+                #     DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+threadIdx.y] = 0;
+                # }
+                #
+                # if ( threadIdx.x == 0 && threadIdx.y == N_LIM-1 && i != 0 && j < N-1 ) {
+                # // upper righthand corners (outside current block) - CHECK!
+                #     DS_A_PAD[threadIdx.x*(N_LIM+2)+(threadIdx.y+2)] = A[(i-1)*N + (j+1)];
+                # } else if ( threadIdx.x == 0 && threadIdx.y == N_LIM-1 && i == 0 && j <= N-1 ) {
+                #     DS_A_PAD[threadIdx.x*(N_LIM+2)+(threadIdx.y+2)] = 0;
+                # }
+                #
+                # if ( threadIdx.x == 0 && threadIdx.y == 0 && i != 0 && j != 0 ) {
+                # // upper lefthand corners (outside current block)
+                #     DS_A_PAD[threadIdx.x*(N_LIM+2)+threadIdx.y] = A[(i-1)*N + (j-1)];
+                # } if ( threadIdx.x == 0 && threadIdx.y == 0 && i == 0 && j >= 0 ) { // changed j == 0 to j >= 0
+                #     DS_A_PAD[threadIdx.x*(N_LIM+2)+threadIdx.y] = 0;
+                # }
+
 kernel_code_template = """
 //2D Convolution function
 __global__ void convolve2d(unsigned int* A, unsigned int* K,
                            const unsigned int M, const unsigned int N,
                            const unsigned int F, unsigned int* C)
 {
+
+    //typedef enum { false, true } bool;
 
     #ifndef TILE_M
         #define TILE_M 3u
@@ -63,8 +122,10 @@ __global__ void convolve2d(unsigned int* A, unsigned int* K,
     // F - Square Dim of K (Pitch)
     // C - Output size MxN
 
-    unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
-    unsigned int j = blockIdx.y * blockDim.y + threadIdx.y;
+    unsigned int tx = threadIdx.x;
+    unsigned int ty = threadIdx.y;
+    unsigned int i = blockIdx.x * blockDim.x + tx;
+    unsigned int j = blockIdx.y * blockDim.y + ty;
 
     if(i < M && j <  N){
     // check to make sure we are within bounds of the overall output size
@@ -80,77 +141,97 @@ __global__ void convolve2d(unsigned int* A, unsigned int* K,
             //}
         //}
 
+        //__syncthreads();
+
+        //// ZERO PADDING
+
+        // I (row) interior matrix boundary
+        if ( i == M-1 ){
+            DS_A_PAD[(tx+2)*(N_LIM+2) + ty] = 0;
+            DS_A_PAD[(tx+2)*(N_LIM+2) + (ty+1)] = 0;
+            DS_A_PAD[(tx+2)*(N_LIM+2) + (ty+2)] = 0;
+        } if ( i == 0 ){
+            DS_A_PAD[tx*(N_LIM+2) + ty] = 0;
+            DS_A_PAD[tx*(N_LIM+2) + (ty+1)] = 0;
+            DS_A_PAD[tx*(N_LIM+2) + (ty+2)] = 0;
+        }
+
+        // Matrix Corner boundaries
+        if (i == 0 && j == 0){
+            DS_A_PAD[0] = 0;
+        }
+        else if (i == M-1 && j == 0){
+            DS_A_PAD[(tx+1)*N_LIM] = 0;
+        }
+        else if (i == 0 && j == N-1){
+            DS_A_PAD[ty+1] = 0;
+        }
+        else if (i == M-1 && j == N-1){
+            DS_A_PAD[(tx+1)*N_LIM + (ty+1)] = 0;
+        }
+
         __syncthreads();
 
-        if ( threadIdx.y == 0 && j != 0 ) {
+        //// FILL VALUES OF DS_A_PAD
+
+        bool left = ( ty == 0 ) ? true : false;
+        bool right = ( ty == N_LIM-1 ) ? true : false;
+        bool top = ( tx == 0 ) ? true : false;
+        bool bottom = ( tx == M_LIM-1 ) ? true : false;
+
+        if ( left && j != 0 ) {
         // vertical left block edges - CHECK!
-            DS_A_PAD[(threadIdx.x+1)*(N_LIM+2)+threadIdx.y] = A[i*N + (j-1)];
-        } if ( threadIdx.y == 0 && j == 0 ) {
-            DS_A_PAD[(threadIdx.x+1)*(N_LIM+2)+threadIdx.y] = 0;
+            DS_A_PAD[(tx+1)*(N_LIM+2)+ty] = A[i*N + (j-1)];
         }
 
-        if ( threadIdx.y == N_LIM-1 && j != N-1 ) {
+        if ( right && j != N-1 ) {
         // veritcal right block edges - CHECK!
-            DS_A_PAD[(threadIdx.x+1)*(N_LIM+2)+(threadIdx.y+2)] = A[i*N + (j+1)];
-        } if ( threadIdx.y == N_LIM-1 && j == N-1 ) {
-            DS_A_PAD[(threadIdx.x+1)*(N_LIM+2)+(threadIdx.y+2)] = 0;
+            DS_A_PAD[(tx+1)*(N_LIM+2)+(ty+2)] = A[i*N + (j+1)];
         }
 
-        if ( threadIdx.x == 0 && i != 0 ) {
+        if ( top && i != 0 ) {
         // horizontal top block edges - CHECK!
-            DS_A_PAD[threadIdx.x*(N_LIM+2)+(threadIdx.y+1)] = A[(i-1)*N + j];
-        } if ( threadIdx.x == 0 && i == 0 ) {
-            DS_A_PAD[threadIdx.x*(N_LIM+2)+(threadIdx.y+1)] = 0;
-            //DS_A_PAD[threadIdx.x*(N_LIM+2)+(threadIdx.y+2)] = 0;
+            DS_A_PAD[tx*(N_LIM+2)+(ty+1)] = A[(i-1)*N + j];
         }
 
-        if ( threadIdx.x == M_LIM-1 && i != M-1) {
+        if ( bottom && i != M-1) {
         // horizontal bottom block edges - CHECK!
-            DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+(threadIdx.y+1)] = A[(i+1)*N + j];
-        } if ( threadIdx.x == M_LIM-1 && i == M-1 ) {
-            DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+(threadIdx.y+1)] = 0;
+            DS_A_PAD[(tx+2)*(N_LIM+2)+(ty+1)] = A[(i+1)*N + j];
         }
 
-        if ( threadIdx.x == M_LIM-1 && threadIdx.y == N_LIM-1 && j != N-1 && i != M-1 ) {
-        // lower righthand corners (outside current block) - CHECK!
-            DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+(threadIdx.y+2)] = A[(i+1)*N + (j+1)];
-        } if ( threadIdx.x == M_LIM-1 && threadIdx.y == N_LIM-1 && j == N-1 && i == M-1 ) {
-            DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+(threadIdx.y+2)] = 0;
+        if ( bottom && right && j != N-1 && i != M-1 ) {
+        // lower righthand block corners (outside current block) - CHECK!
+            DS_A_PAD[(tx+2)*(N_LIM+2)+(ty+2)] = A[(i+1)*N + (j+1)];
         }
 
-        if ( threadIdx.x == M_LIM-1 && threadIdx.y == 0 && j != 0 && i < M-1 ) {
-        // lower lefthand corners (outside current block) - CHECK!
-            DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+threadIdx.y] = A[(i+1)*N + (j-1)];
-        } if ( threadIdx.x == M_LIM-1 && threadIdx.y == 0 && i == M-1 ) { // removed j == 0
-            DS_A_PAD[(threadIdx.x+2)*(N_LIM+2)+threadIdx.y] = 0;
+        if ( bottom && left && j != 0 && i < M-1 ) {
+        // lower lefthand block corners (outside current block) - CHECK!
+            DS_A_PAD[(tx+2)*(N_LIM+2)+ty] = A[(i+1)*N + (j-1)];
         }
 
-        if ( threadIdx.x == 0 && threadIdx.y == N_LIM-1 && i != 0 && j < N-1 ) {
-        // upper righthand corners (outside current block) - CHECK!
-            DS_A_PAD[threadIdx.x*(N_LIM+2)+(threadIdx.y+2)] = A[(i-1)*N + (j+1)];
-        } else if ( threadIdx.x == 0 && threadIdx.y == N_LIM-1 && i == 0 && j <= N-1 ) {
-            DS_A_PAD[threadIdx.x*(N_LIM+2)+(threadIdx.y+2)] = 0;
+        if ( top && right && i != 0 && j < N-1 ) {
+        // upper righthand block corners (outside current block) - CHECK!
+            DS_A_PAD[tx*(N_LIM+2)+(ty+2)] = A[(i-1)*N + (j+1)];
         }
 
-        if ( threadIdx.x == 0 && threadIdx.y == 0 && i != 0 && j != 0 ) {
-        // upper lefthand corners (outside current block)
-            DS_A_PAD[threadIdx.x*(N_LIM+2)+threadIdx.y] = A[(i-1)*N + (j-1)];
-        } if ( threadIdx.x == 0 && threadIdx.y == 0 && i == 0 && j >= 0 ) { // changed j == 0 to j >= 0
-            DS_A_PAD[threadIdx.x*(N_LIM+2)+threadIdx.y] = 0;
+        if ( top && left && i != 0 && j != 0 ) {
+        // upper lefthand block corners (outside current block)
+            DS_A_PAD[tx*(N_LIM+2)+ty] = A[(i-1)*N + (j-1)];
         }
 
         // J (col) interior matrix boundary
         if ( j == N-1 ){
-            DS_A_PAD[(threadIdx.x+1)*(N_LIM+2) + (threadIdx.y+2)] = 0;
-        }
-
-        // I (row) interior matrix boundary
-        if ( i == M-1 ){
-            DS_A_PAD[(threadIdx.x+2)*(N_LIM+2) + (threadIdx.y+1)] = 0;
+            DS_A_PAD[tx*(N_LIM+2) + (ty+2)] = 0;
+            DS_A_PAD[(tx+1)*(N_LIM+2) + (ty+2)] = 0;
+            DS_A_PAD[(tx+2)*(N_LIM+2) + (ty+2)] = 0;
+        } if ( j == 0 ){
+            DS_A_PAD[tx*(N_LIM+2) + ty] = 0;
+            DS_A_PAD[(tx+1)*(N_LIM+2) + ty] = 0;
+            DS_A_PAD[(tx+2)*(N_LIM+2) + ty] = 0;
         }
 
         // internal elements
-          DS_A_PAD[(threadIdx.x+1)*(N_LIM+2)+(threadIdx.y+1)] = A[i*N + j];
+            DS_A_PAD[(tx+1)*(N_LIM+2)+(ty+1)] = A[i*N + j];
 
         __syncthreads();
 
@@ -164,7 +245,7 @@ __global__ void convolve2d(unsigned int* A, unsigned int* K,
         C[i*N + j] = 0;
         for(unsigned int m = 0; m < F; m++){
             for(unsigned int n = 0; n < F; n++){
-                C[i*N + j] += K[m*F + n] * DS_A_PAD[((threadIdx.x+1)-m+1)*(N_LIM+2) +((threadIdx.y+1)-n+1)];
+                C[i*N + j] += K[m*F + n] * DS_A_PAD[((tx+1)-m+1)*(N_LIM+2) +((ty+1)-n+1)];
             }
         }// end convolution calculation
 
@@ -179,14 +260,14 @@ __global__ void convolve2d(unsigned int* A, unsigned int* K,
 ##################################################
 
 # Configurations
-M = 65 #rows
-N = 65 #columns
+M = 69 #rows
+N = 69 #columns
 F = 3 #square dim of "kernel/filter"
 
-a = np.random.randint(0, 9, (M,N)).astype(np.uint32) #a is matrix which will be convolved
+a = np.random.randint(0,100, (M,N)).astype(np.uint32) #a is matrix which will be convolved
 
 # create an FxF filter of random numbers
-# f = np.random.randint(0, 9, (F,F)).astype(np.uint32) #f is kernel matrix
+# f = np.random.randint(0, 100, (F,F)).astype(np.uint32) #f is kernel matrix
 f = np.ones((F,F)).astype(np.uint32) #f is kernel matrix
 
 # mode='same' gives equal (unpadded) input size to OUTPUT size
@@ -240,6 +321,9 @@ for i in range(M):
             print "element[" + str(i) + "][" + str(j) + "] isn't matching"
             print "C_gpu["+str(i)+"]["+str(j)+"] = ", C_gpu[i][j]
             print "c[i][j] =", c[i][j]
+            for p in range(3):
+                for q in range(3):
+                    print a[i-1+p][j-1+q]
 
 # print "d_gpu: \n", D_gpu
 # for i in range(M+2):
