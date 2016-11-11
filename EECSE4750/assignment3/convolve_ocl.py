@@ -2,15 +2,15 @@
 # -*- coding: utf-8 -*-
 
 """
-Matrix Convolution in PyCUDA
+Matrix Convolution in PyOPENCL
 """
 
 import numpy as np
 # np.set_printoptions(threshold=np.nan)
 np.set_printoptions(edgeitems=8)
-#import PYCUDA modules and libraries
-from pycuda import driver, compiler, gpuarray, tools
-import sys
+#import PYOPENCL modules and libraries
+import pyopencl as cl
+import pyopencl.array
 #the following module is used to mark the time stamps
 import time
 #import necessary scipy libraries
@@ -18,106 +18,35 @@ import scipy as sp
 import scipy.signal
 from scipy.signal import convolve2d as conv2d
 
-# -- initialize the device
-import pycuda.autoinit
+#  Select the desired OpenCL platform; you shouldn't need to change this:
+NAME = 'NVIDIA CUDA'
+platforms = cl.get_platforms()
+devs = None
+for platform in platforms:
+    if platform.name == NAME:
+        devs = platform.get_devices()
+
+# Set up a command queue:
+cidx = cl.Context(devs)
+queue = cl.CommandQueue(cidx, properties=cl.command_queue_properties.PROFILING_ENABLE)
 
 ############################
 ##SAVED CODE
 ############################
-    # for i in range(M):
-    #     for j in range(N):
-    #         if c_gpu[i][j] != c[i][j] :
-    #             print "element[" + str(i) + "][" + str(j) + "] isn't matching"
-    #             print "C_gpu["+str(i)+"]["+str(j)+"] = ", c_gpu[i][j]
-    #             print "c[i][j] =", c[i][j]
-    #             for p in range(5):
-    #                 for q in range(5):
-    #                     if (i-2+p >= M or j-2+q >= N):
-    #                         print "x"
-    #                     else:
-    #                         print a[i-2+p][j-2+q]
-        # // I (row) interior matrix boundary
-        # if ( i == M-1 ){
-        #     for(int z=1; z <= F/2; z++){
-        #         DS_A_PAD[(tx+F-z)*(N_LIM+F-1) + (ty+F/2-1)] = 0;
-        #         DS_A_PAD[(tx+F-z)*(N_LIM+F-1) + (ty+F/2)] = 0;
-        #         DS_A_PAD[(tx+F-z)*(N_LIM+F-1) + (ty+F/2+1)] = 0;
-        #     }
-        # } if ( i == 0 ){
-        #     for(int z=1; z <= F/2; z++){
-        #         DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1) + (ty+F/2-1)] = 0;
-        #         DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1) + (ty+F/2)] = 0;
-        #         DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1) + (ty+F/2+1)] = 0;
-        #     }
-        # }
-        #
-        # // J (col) interior matrix boundary
-        # if ( j == N-1 ){
-        #     for(int z=1; z <= F/2; z++){
-        #         DS_A_PAD[(tx+F/2-1)*(N_LIM+F-1) + (ty+F-z)] = 0;
-        #         DS_A_PAD[(tx+F/2)*(N_LIM+F-1) + (ty+F-z)] = 0;
-        #         DS_A_PAD[(tx+F/2+1)*(N_LIM+F-1) + (ty+F-z)] = 0;
-        #     }
-        # } if ( j == 0 ){
-        #     for(int z=1; z <=F/2; z++){
-        #         DS_A_PAD[(tx+F/2-1)*(N_LIM+F-1) + (ty+F/2-z)] = 0;
-        #         DS_A_PAD[(tx+F/2)*(N_LIM+F-1) + (ty+F/2-z)] = 0;
-        #         DS_A_PAD[(tx+F/2+1)*(N_LIM+F-1) + (ty+F/2-z)] = 0;
-        #     }
-        # }
-        #
-        # // Matrix Corner boundaries
-        # if (i == 0 && j == 0){
-        # // upper left
-        #     for(int q=1; q <= F/2; q++){
-        #         for(int z=0; z <= F/2; z++){
-        #             DS_A_PAD[z*(N_LIM+F-1)+q] = 0;
-        #         }
-        #     }
-        # }
-        # else if (i == M-1 && j == 0){
-        # // lower left
-        #     for(int q=1; q <= F/2; q++){
-        #         for(int z=0; z <= F/2; z++){
-        #             DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1)+q] = 0;
-        #         }
-        #     }
-        # }
-        # else if (i == 0 && j == N-1){
-        # // upper right
-        #     for(int q=1; q <= F/2; q++){
-        #         for(int z=0; z <= F/2; z++){
-        #             DS_A_PAD[z*(N_LIM+F-1) + (ty+q)] = 0;
-        #         }
-        #     }
-        # }
-        # else if (i == M-1 && j == N-1){
-        # // lower right
-        #     for(int q=1; q <= F/2; q++){
-        #         for(int z=0; z <= F/2; z++){
-        #             DS_A_PAD[(tx+z+1)*(N_LIM+F-1) + (ty+q+1)] = 0;
-        #         }
-        #     }
-        # }
-        #
-        # __syncthreads();
 
 ############################
-##CUDA KERNEL
+##OPENCL KERNEL
 ############################
 
 kernel_code_template = """
 //2D Convolution function
-__global__ void convolve2d(int* A, int* K,
+__kernel void convolve2d(__global int* A, __global int* K,
                            const int M, const int N,
-                           const int F, int* C)
+                           const int F, __global int* C)
 {
 
-    #ifndef TILE_M
-        #define TILE_M 3u
-    #endif
-    #ifndef TILE_N
-        #define TILE_N 3u
+    #ifndef LOCAL_SIZE
+        #define LOCAL_SIZE 3u
     #endif
 
     // A - input size MxN
@@ -127,18 +56,18 @@ __global__ void convolve2d(int* A, int* K,
     // F - Square Dim of K (Pitch)
     // C - Output size MxN
 
-    int tx = threadIdx.x;
-    int ty = threadIdx.y;
-    int i = blockIdx.x * blockDim.x + tx;
-    int j = blockIdx.y * blockDim.y + ty;
+    int idx = get_local_id(1);
+    int idy = get_local_id(0);
+    int i = get_group_id(1)*get_local_size(1) + get_local_id(1);
+    int j = get_group_id(0)*get_local_size(0) + get_local_id(0);
 
     if(i < M && j <  N){
     // check to make sure we are within bounds of the overall output size
 
         // create flattened padded matrix size M+2 x N+2 to use for convolution input
-        extern __shared__ int DS_A_PAD[];
-        int M_LIM = (M > 32) ? ((blockIdx.x+1)*blockDim.x < M) ? blockDim.x : blockDim.x - (blockIdx.x+1)*blockDim.x % M : M;
-        int N_LIM = (N > 32) ? ((blockIdx.y+1)*blockDim.y < N) ? blockDim.y : blockDim.y - (blockIdx.y+1)*blockDim.y % N : N;
+        __local int DS_A_PAD[LOCAL_SIZE];
+        int M_LIM = (M > 32) ? ((get_group_id(1)+1)*get_local_size(1) < M) ? get_local_size(1) : get_local_size(1) - (get_group_id(1)+1)*get_local_size(1) % M : M;
+        int N_LIM = (N > 32) ? ((get_group_id(0)+1)*get_local_size(0) < N) ? get_local_size(0) : get_local_size(0) - (get_group_id(0)+1)*get_local_size(0) % N : N;
 
         //// ZERO PADDING - comes before fill so as not to overwrite
 
@@ -148,22 +77,22 @@ __global__ void convolve2d(int* A, int* K,
             }
         }
 
-        __syncthreads();
+        barrier(CLK_LOCAL_MEM_FENCE);
 
         //// FILL VALUES OF DS_A_PAD
 
-        bool left = ( ty == 0 ) ? true : false;
-        bool right = ( ty == N_LIM-1 ) ? true : false;
-        bool top = ( tx == 0 ) ? true : false;
-        bool bottom = ( tx == M_LIM-1 ) ? true : false;
+        bool left = ( idy == 0 ) ? true : false;
+        bool right = ( idy == N_LIM-1 ) ? true : false;
+        bool top = ( idx == 0 ) ? true : false;
+        bool bottom = ( idx == M_LIM-1 ) ? true : false;
 
         if ( left && j != 0 ) {
         // vertical left block edges - CHECK!
             for(int z=1; z <= F/2; z++){
                 if ((j-z) < 0){
-                    DS_A_PAD[(tx+F/2)*(N_LIM+F-1)+(ty+F/2-z)] = 0;
+                    DS_A_PAD[(idx+F/2)*(N_LIM+F-1)+(idy+F/2-z)] = 0;
                 } else {
-                    DS_A_PAD[(tx+F/2)*(N_LIM+F-1)+(ty+F/2-z)] = A[i*N + (j-z)];
+                    DS_A_PAD[(idx+F/2)*(N_LIM+F-1)+(idy+F/2-z)] = A[i*N + (j-z)];
                 }
             }
         }
@@ -172,9 +101,9 @@ __global__ void convolve2d(int* A, int* K,
         // veritcal right block edges - WATCH!
             for(int z=1; z <= F/2; z++){
                 if ((j+z) >= N){
-                    DS_A_PAD[(tx+F/2)*(N_LIM+F-1)+(ty+F/2+z)] = 0;
+                    DS_A_PAD[(idx+F/2)*(N_LIM+F-1)+(idy+F/2+z)] = 0;
                 } else {
-                    DS_A_PAD[(tx+F/2)*(N_LIM+F-1)+(ty+F/2+z)] = A[i*N + (j+z)];
+                    DS_A_PAD[(idx+F/2)*(N_LIM+F-1)+(idy+F/2+z)] = A[i*N + (j+z)];
                 }
             }
         }
@@ -183,9 +112,9 @@ __global__ void convolve2d(int* A, int* K,
         // horizontal top block edges - CHECK!
             for(int z=1; z <= F/2; z++){
                 if((i-z) < 0){
-                    DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1)+(ty+F/2)] = 0;
+                    DS_A_PAD[(idx+F/2-z)*(N_LIM+F-1)+(idy+F/2)] = 0;
                 } else {
-                    DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1)+(ty+F/2)] = A[(i-z)*N + j];
+                    DS_A_PAD[(idx+F/2-z)*(N_LIM+F-1)+(idy+F/2)] = A[(i-z)*N + j];
                 }
             }
         }
@@ -194,9 +123,9 @@ __global__ void convolve2d(int* A, int* K,
         // horizontal bottom block edges - WATCH!
             for(int z=1; z <= F/2; z++){
                 if ((i+z) >= M){
-                    DS_A_PAD[(tx+F/2+z)*(N_LIM+F-1)+(ty+F/2)] = 0;
+                    DS_A_PAD[(idx+F/2+z)*(N_LIM+F-1)+(idy+F/2)] = 0;
                 } else {
-                    DS_A_PAD[(tx+F/2+z)*(N_LIM+F-1)+(ty+F/2)] = A[(i+z)*N + j];
+                    DS_A_PAD[(idx+F/2+z)*(N_LIM+F-1)+(idy+F/2)] = A[(i+z)*N + j];
                 }
             }
         }
@@ -206,9 +135,9 @@ __global__ void convolve2d(int* A, int* K,
             for(int q=1; q <= F/2; q++){
                 for(int z=1; z <= F/2; z++){
                     if((i+z) >= M || (j+q) >= N){
-                        DS_A_PAD[(tx+F/2+z)*(N_LIM+F-1)+(ty+F/2+q)] = 0;
+                        DS_A_PAD[(idx+F/2+z)*(N_LIM+F-1)+(idy+F/2+q)] = 0;
                     } else {
-                        DS_A_PAD[(tx+F/2+z)*(N_LIM+F-1)+(ty+F/2+q)] = A[(i+z)*N + (j+q)];
+                        DS_A_PAD[(idx+F/2+z)*(N_LIM+F-1)+(idy+F/2+q)] = A[(i+z)*N + (j+q)];
                     }
                 }
             }
@@ -219,9 +148,9 @@ __global__ void convolve2d(int* A, int* K,
             for(int q=1; q <= F/2; q++){
                 for(int z=1; z <= F/2; z++){
                     if((i+z) >= M || (j+q) < 0){
-                        DS_A_PAD[(tx+F/2+z)*(N_LIM+F-1)+(ty+F/2-q)] = 0;
+                        DS_A_PAD[(idx+F/2+z)*(N_LIM+F-1)+(idy+F/2-q)] = 0;
                     } else {
-                        DS_A_PAD[(tx+F/2+z)*(N_LIM+F-1)+(ty+F/2-q)] = A[(i+z)*N + (j-q)];
+                        DS_A_PAD[(idx+F/2+z)*(N_LIM+F-1)+(idy+F/2-q)] = A[(i+z)*N + (j-q)];
                     }
                 }
             }
@@ -232,9 +161,9 @@ __global__ void convolve2d(int* A, int* K,
             for(int q=1; q <= F/2; q++){
                 for(int z=1; z <= F/2; z++){
                     if((i-z) >= M || (j+q) >= N){
-                        DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1)+(ty+F/2+q)] = 0;
+                        DS_A_PAD[(idx+F/2-z)*(N_LIM+F-1)+(idy+F/2+q)] = 0;
                     } else {
-                        DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1)+(ty+F/2+q)] = A[(i-z)*N + (j+q)];
+                        DS_A_PAD[(idx+F/2-z)*(N_LIM+F-1)+(idy+F/2+q)] = A[(i-z)*N + (j+q)];
                     }
                 }
             }
@@ -245,33 +174,34 @@ __global__ void convolve2d(int* A, int* K,
             for(int q=1; q <= F/2; q++){
                 for(int z=1; z <= F/2; z++){
                     if((i-z) < 0 || (j-q) <0){
-                        DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1)+(ty+F/2-q)] = 0;
+                        DS_A_PAD[(idx+F/2-z)*(N_LIM+F-1)+(idy+F/2-q)] = 0;
                     } else {
-                        DS_A_PAD[(tx+F/2-z)*(N_LIM+F-1)+(ty+F/2-q)] = A[(i-z)*N + (j-q)];
+                        DS_A_PAD[(idx+F/2-z)*(N_LIM+F-1)+(idy+F/2-q)] = A[(i-z)*N + (j-q)];
                     }
                 }
             }
         }
 
         // internal elements
-            DS_A_PAD[(tx+F/2)*(N_LIM+F-1)+(ty+F/2)] = A[i*N + j];
+            DS_A_PAD[(idx+F/2)*(N_LIM+F-1)+(idy+F/2)] = A[i*N + j];
 
-        __syncthreads();
+        barrier(CLK_LOCAL_MEM_FENCE);
 
-        //C[i*N+j] = DS_A_PAD[(tx+F/2-2)*(N_LIM+F-1) + (ty + F/2-2)];
+        C[i*N+j] = DS_A_PAD[(idx+F/2)*(N_LIM+F-1)+(idy+F/2)];
 
         //// CONVOLUTION Calculation for element (i,j)
 
         C[i*N + j] = 0;
         for(int m = 0; m < F; m++){
             for(int n = 0; n < F; n++){
-                C[i*N + j] += K[m*F + n] * DS_A_PAD[(tx-m+F-1)*(N_LIM+F-1) +(ty-n+F-1)];
+                C[i*N + j] += K[m*F + n] * DS_A_PAD[(idx-m+F-1)*(N_LIM+F-1) +(idy-n+F-1)];
             }
         }// end convolution calculation
 
-        __syncthreads();
+        barrier(CLK_LOCAL_MEM_FENCE);
 
     }// end output boundary check
+
 }
 """
 
@@ -282,33 +212,29 @@ __global__ void convolve2d(int* A, int* K,
 ## test_instance - runs through a single iteration of the convolution test
 def test_instance(M,N,F,a,f,c):
 
+    # set build options / local memory size
+    LSIZE = str((32+F-1)*(32+F-1)) + 'u'
+    options = "-DLOCAL_SIZE=" + LSIZE
+
+    # build the kernel
+    prg = cl.Program(cidx,kernel_code_template).build(options.strip())
+
     # get the kernel code from the template
     kernel_code = kernel_code_template
 
-    # compile the kernel code, with options
-    TILE_M = str(M) + 'u' if (M <= 32) else str(32) + 'u'
-    TILE_N = str(N) + 'u' if (N <= 32) else str(32) + 'u'
-    options = "-DTILE_M=" + TILE_M + " -DTILE_N=" + TILE_N
-    OPTIONS = [_flag.strip() for _flag in options.split() if _flag.strip()]
-    # print OPTIONS
-    mod = compiler.SourceModule(kernel_code,options=OPTIONS)
-
-    # get the kernel function from the compiled module
-    conv = mod.get_function("convolve2d")
-
     # create buffers for transfer into GPU
-    A_buf = gpuarray.to_gpu(a)
-    K_buf = gpuarray.to_gpu(f)
-    C_buf = gpuarray.empty((M,N),a.dtype)
+    A_buf = cl.array.to_device(queue,a)
+    K_buf = cl.array.to_device(queue,f)
+    C_buf = cl.array.empty(queue,(M,N),a.dtype)
     C_gpu = np.empty((M,N),a.dtype)
 
-    # call to conv
-    unit_size = np.dtype(np.int32).itemsize
-    shared_mem = (M+F-1)*(N+F-1)*unit_size if (M <= 32) and (N <= 32) else (32+F-1)*(32+F-1)*unit_size
-    # shared_mem = (M+F-1)*(N+F-1)*unit_size if (M <= 32) and (N <= 32) else (100)*(100)*unit_size
+    # dimensions to deploy
+    global_dim = ((np.int32(M-1/32)+1)*32,(np.int32(N-1/32)+1)*32,1)
+    local_dim = (32,32,1)
 
+    # deploy kernel
     start = time.time()
-    conv(A_buf,K_buf,np.int32(M),np.int32(N),np.int32(F),C_buf,block = (32,32,1),grid = (np.int32(M-1/32)+1,np.int32(N-1/32)+1,1),shared=shared_mem)
+    prg.convolve2d(queue,global_dim,local_dim,A_buf.data,K_buf.data,np.int32(M),np.int32(N),np.int32(F),C_buf.data)
     gpu_runtime = time.time() - start
 
     # copy data back from GPU
@@ -355,7 +281,7 @@ def main(_M_=5, _N_=5, _F_=3):
     print "c: \n", c
     print "c runtime: ", runtime
 
-    print "----------------------- CUDA ----------------------------"
+    print "----------------------- OPENCL ----------------------------"
     runtime, c_gpu = test_instance(M,N,F,a,f,c)
 
     print "c_gpu: \n", c_gpu
@@ -399,19 +325,19 @@ def main(_M_=5, _N_=5, _F_=3):
         import matplotlib.pyplot as plt
         px = list(xrange(len(cpu_times)))
         cx = list(xrange(len(gpu_times)))
-        # cox = list(xrange(len(cuda_opt_times)))
+        # cox = list(xrange(len(opencl_opt_times)))
 
         plt.gcf()
         plt.plot(px, cpu_times, color='r', label='python')
-        plt.plot(cx, gpu_times, color='g', label='CUDA')
-        # plt.plot(cox, cuda_opt_times, color='b', label='CUDA Optimized')
+        plt.plot(cx, gpu_times, color='g', label='OPENCL')
+        # plt.plot(cox, opencl_opt_times, color='b', label='OPENCL Optimized')
         plt.xlabel('3x3 image * k, with 3x3 kernel')
         plt.ylabel('time')
         plt.legend(loc='upper left')
-        plt.title('Matrix Convolution: Python vs. CUDA')
+        plt.title('Matrix Convolution: Python vs. OPENCL')
         plt.gca().set_xlim((min(px), max(px)))
         plt.gca().set_ylim((min(cpu_times)/2, max(gpu_times)*1.2))
-        plt.savefig('cuda_scale_image.png')
+        plt.savefig('opencl_scale_image.png')
 
     print "====================== PART 1-C =========================="
     print "--------------------- PYTHON ---------------------------"
@@ -454,19 +380,19 @@ def main(_M_=5, _N_=5, _F_=3):
         import matplotlib.pyplot as plt
         px = list(xrange(len(cpu_times)))
         cx = list(xrange(len(gpu_times)))
-        # cox = list(xrange(len(cuda_opt_times)))
+        # cox = list(xrange(len(opencl_opt_times)))
 
         plt.gcf()
         plt.plot(px, cpu_times, color='r', label='python')
-        plt.plot(cx, gpu_times, color='g', label='CUDA')
-        # plt.plot(cox, cuda_opt_times, color='b', label='CUDA Optimized')
+        plt.plot(cx, gpu_times, color='g', label='OPENCL')
+        # plt.plot(cox, opencl_opt_times, color='b', label='OPENCL Optimized')
         plt.xlabel('300x200 image, with 3kx3k kernel')
         plt.ylabel('time')
         plt.legend(loc='upper left')
-        plt.title('Matrix Convolution: Python vs. CUDA')
+        plt.title('Matrix Convolution: Python vs. OPENCL')
         plt.gca().set_xlim((min(px), max(px)))
         plt.gca().set_ylim((min(gpu_times)/2, max(gpu_times)*40))
-        plt.savefig('cuda_scale_kernel.png')
+        plt.savefig('opencl_scale_kernel.png')
 
     print "====================== PART 2 =========================="
     print "--------------------- PYTHON ---------------------------"
@@ -508,52 +434,12 @@ def main(_M_=5, _N_=5, _F_=3):
         c_cpu = conv2d(original_image.astype(np.int32),filters[filter], mode='same', boundary='fill')
         gpu_img = Image.fromarray(c_gpu.astype(np.uint8))
         cpu_img = Image.fromarray(c_cpu.astype(np.uint8))
-        cpu_fn = str(filter) + '_img_cpu_cuda.png'
-        gpu_fn = str(filter) + '_img_gpu_cuda.png'
+        cpu_fn = str(filter) + '_img_cpu_opencl.png'
+        gpu_fn = str(filter) + '_img_gpu_opencl.png'
         cpu_img.save(cpu_fn)
         gpu_img.save(gpu_fn)
         print "Filter: " + filter
         print "c_gpu == c_cpu ? --> ", np.allclose(c_gpu,c_cpu)
-
-    # # RUN IDENTITY FILTER
-    # runtime, c_gpu = test_instance(640,640,3,original_image.astype(np.int32),filters['identity'],c)
-    # identity_output = Image.fromarray(c_gpu)
-    # identity_output.save('identity_image_gpu.png')
-    #
-    # identiy_output = Image.fromarray(conv2d(original_image.astype(np.int32),filters['identity'], mode='same', boundary='fill').astype(np.uint8))
-    # identity_output.save('identity_image_cpu.png')
-    #
-    # # RUN SHARPEN FILTER
-    # runtime, c_gpu = test_instance(640,640,3,original_image,filters['sharpen'],c)
-    # sharpen_output = Image.fromarray(c_gpu.astype(np.uint8))
-    # sharpen_output.save('sharpen_image_gpu.png')
-    #
-    # sharpen_output = Image.fromarray(conv2d(original_image.astype(np.int32),filters['sharpen'], mode='same', boundary='fill').astype(np.uint8))
-    # sharpen_output.save('sharpen_image_cpu.png')
-    #
-    # # RUN BLUR FILTER
-    # runtime, c_gpu = test_instance(640,640,3,original_image,filters['blur'],c)
-    # blur_output = Image.fromarray(c_gpu.astype(np.uint8))
-    # blur_output.save('blur_image_gpu.png')
-    #
-    # blur_output = Image.fromarray(conv2d(original_image.astype(np.int32),filters['blur'], mode='same', boundary='fill').astype(np.uint8))
-    # blur_output.save('blur_image_cpu.png')
-    #
-    # # RUN BLUR FILTER
-    # runtime, c_gpu = test_instance(640,640,3,original_image,filters['edge_det'],c)
-    # edge_det_output = Image.fromarray(c_gpu.astype(np.uint8))
-    # edge_det_output.save('edge_det_image_gpu.png')
-    #
-    # edge_det_output = Image.fromarray(conv2d(original_image.astype(np.int32),filters['edge_det'], mode='same', boundary='fill').astype(np.uint8))
-    # edge_det_output.save('edge_det_image_cpu.png')
-    #
-    # # RUN EMBOSS FILTER
-    # runtime, c_gpu = test_instance(640,640,3,original_image,filters['edge_det'],c)
-    # edge_det_output = Image.fromarray(c_gpu.astype(np.uint8))
-    # edge_det_output.save('edge_det_image_gpu.png')
-    #
-    # edge_det_output = Image.fromarray(conv2d(original_image.astype(np.int32),filters['edge_det'], mode='same', boundary='fill').astype(np.uint8))
-    # edge_det_output.save('edge_det_image_cpu.png')
 
 if __name__ == '__main__':
 	main(640,640)
