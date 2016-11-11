@@ -414,9 +414,21 @@ def main(_M_=5, _N_=5, _F_=3):
     ## Partially based on:
     ## http://www.programcreek.com/python/example/58254/scipy.signal.convolve2d
 
-    original_image = create_img("./thrones-002-2.jpg", 640,640)
-    # output_image = Image.fromarray(original_image)
-    # output_image.save('test.png')
+    original_image = create_img("./thrones-002-2.jpg", 612,380)
+
+    big_smooth = np.array(
+    [[0., 1., 2., 4., 8., 16., 8., 4., 2., 1., 0.],
+     [1., 2., 4., 8., 16., 32., 16., 8., 4., 2., 1.],
+     [2., 4., 8., 16., 32., 64., 32., 16., 8., 4., 2.],
+     [4., 8., 16., 32., 64., 128., 64., 32., 16., 8., 4.],
+     [8., 16., 32., 64., 128., 256., 128., 64., 32., 16., 8.],
+     [16., 32., 64., 128., 256., 512., 256., 128., 64., 32., 16.],
+     [8., 16., 32., 64., 128., 256., 128., 64., 32., 16., 8.],
+     [4., 8., 16., 32., 64., 128., 64., 32., 16., 8., 4.],
+     [2., 4., 8., 16., 32., 64., 32., 16., 8., 4., 2.],
+     [1., 2., 4., 8., 16., 32., 16., 8., 4., 2., 1.],
+     [0., 1., 2., 4., 8., 16., 8., 4., 2., 1., 0.],
+     ]).astype(np.int32)
 
     filters = {
                     'identity':np.array([ [0.,0.,0.],[0.,1.,0.],[0.,0.,0.]  ]).astype(np.int32),
@@ -426,11 +438,12 @@ def main(_M_=5, _N_=5, _F_=3):
                     'emboss':np.array([[2., 1. , 0.], [1., 1., -1.], [0., -1., -2]]).astype(np.int32),
                     'sob_x':np.array([[-1., 0. , 1.], [-2., 0., 2.], [-1., 0., 1]]).astype(np.int32),
                     'sob_y':np.array([[-1., -2. , -1.], [0., 0., 0.], [1., 2., 1.]]).astype(np.int32),
-                    'smooth_5x5':np.array([[0., 1., 2. , 1., 0.], [1., 4., 8., 4., 1.],[2.,8.,16.,8.,2.],[1.,4.,8.,4.,1.], [0.,1., 2., 1.,0.]]).astype(np.int32)
+                    'smooth_5x5':np.array([[0., 1., 2. , 1., 0.], [1., 4., 8., 4., 1.],[2.,8.,16.,8.,2.],[1.,4.,8.,4.,1.], [0.,1., 2., 1.,0.]]).astype(np.int32),
+                    'smooth_11x11':big_smooth
             }
 
     for filter in filters:
-        runtime, c_gpu = test_instance(640,640,len(filters[filter][0]),original_image.astype(np.int32),filters[filter],c)
+        runtime, c_gpu = test_instance(380,612,len(filters[filter][0]),original_image.astype(np.int32),filters[filter],c)
         c_cpu = conv2d(original_image.astype(np.int32),filters[filter], mode='same', boundary='fill')
         gpu_img = Image.fromarray(c_gpu.astype(np.uint8))
         cpu_img = Image.fromarray(c_cpu.astype(np.uint8))
