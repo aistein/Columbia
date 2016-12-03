@@ -77,6 +77,36 @@ naive_hist.set_scalar_arg_dtypes([None, None, np.uint32])
 ## First Histogram Kernel Optimization ##
 #########################################
 
+# opt1_hist = cl.Program(ctx, """
+# __kernel void opt1_hist(__global unsigned char *img, __global unsigned int *bins,
+#                    const unsigned int P, const unsigned int N) {
+#
+#     // pragma to enable larger atomic add
+#     #pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
+#
+#     unsigned int i = get_global_id(0);
+#     unsigned int k;
+#     unsigned char z;
+#     //volatile __local unsigned int bins_loc[256];
+#     volatile __local unsigned char bins_loc[256];
+#
+#     // DEVICE_OPT1 : ???
+#     //for (k=0; k<256; k++)
+#     if (i < 256)
+#         bins_loc[i] = 0;
+#     //barrier(CLK_LOCAL_MEM_FENCE);
+#     for (k=0; k<P; k++)
+#         //++bins_loc[img[i*P+k]];
+#         //z = img[i*P+k];
+#         //barrier(CLK_LOCAL_MEM_FENCE);
+#         bins_loc[img[i*P+k]] = bins_loc[img[i*P+k]] + 1;
+#         //atom_add(&bins_loc[z], 1);
+#     barrier(CLK_LOCAL_MEM_FENCE);
+#     for (k=0; k<256; k++)
+#         atomic_add(&bins[k], bins_loc[k]);
+# }
+# """).build().opt1_hist
+
 opt1_hist = cl.Program(ctx, """
 __kernel void opt1_hist(__global unsigned char *img, __global unsigned int *bins,
                    const unsigned int P, const unsigned int N) {
@@ -84,24 +114,27 @@ __kernel void opt1_hist(__global unsigned char *img, __global unsigned int *bins
     // pragma to enable larger atomic add
     #pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
 
-    unsigned int i = get_global_id(0);
-    unsigned int k;
-    unsigned char z;
-    //volatile __local unsigned int bins_loc[256];
-    volatile __local unsigned char bins_loc[256];
+    // declare top variables
+    __local unsigned int private_histo[256];
 
-    // DEVICE_OPT1 : ???
-    //for (k=0; k<256; k++)
-    if (i < 256)
-        bins_loc[i] = 0;
-    //barrier(CLK_LOCAL_MEM_FENCE);
-    for (k=0; k<P; k++)
-        //++bins_loc[img[i*P+k]];
-        //z = img[i*P+k];
-        //barrier(CLK_LOCAL_MEM_FENCE);
-        bins_loc[img[i*P+k]] = bins_loc[img[i*P+k]] + 1;
-        //atom_add(&bins_loc[z], 1);
+    // fill the private histogram with zeros
+    for (k=0; k<256; k++)
+        private_histo[get_global_id(0)] = 0;
     barrier(CLK_LOCAL_MEM_FENCE);
+
+    // increment private histogram elements accordingly
+    unsigned int stride = get_global_size(0);
+    unsigned int i = get_global_id(0);
+    while( i < N ){
+        //atom_add(&private_histo[img[i]], 1);
+        ++private_histo[img[i]];
+        i += stride;
+    }
+
+    // wait for all other threads in the work-group to finish
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    // build final histogram
     for (k=0; k<256; k++)
         atomic_add(&bins[k], bins_loc[k]);
 }
@@ -139,7 +172,8 @@ img_gpu_opt.set(img)
 # img_gpu_opt = cl.array.to_device(queue, img)
 bin_gpu_opt = cl.array.zeros(queue, 256, np.uint32)
 start = time.time()
-opt1_hist(queue, (N/32,), (1,), img_gpu_opt.data, bin_gpu_opt.data, 32, N)
+# opt1_hist(queue, (N/32,), (1,), img_gpu_opt.data, bin_gpu_opt.data, 32, N)
+opt1_hist(queue, (N,), (32,), img_gpu_opt.data, bin_gpu_opt.data, 32, N)
 print time.time()-start
 h_op_opt =  bin_gpu_opt.get()
 print "opencl: ",h_op_opt
