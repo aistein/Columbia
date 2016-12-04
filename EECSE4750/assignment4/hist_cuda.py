@@ -65,7 +65,9 @@ __global__ void opt_hist(unsigned char*img, unsigned int *bins,
 
     #define TILE_WIDTH 16
 
-    unsigned int glob_idx = (blockIdx.x*blockDim.x + threadIdx.x) + (blockIdx.y*blockDim.y + threadIdx.y)*(gridDim.x*blockDim.x);
+    unsigned int glob_x = blockIdx.x*blockDim.x + threadIdx.x;
+    unsigned int glob_y = blockIdx.y*blockDim.y + threadIdx.y;
+    unsigned int glob_idx = glob_x + glob_y*(gridDim.x*blockDim.x);
     unsigned int tile_idx = (threadIdx.x + TILE_WIDTH*threadIdx.y);
 
     unsigned int j, k;
@@ -81,23 +83,35 @@ __global__ void opt_hist(unsigned char*img, unsigned int *bins,
         }
     }
 
-    // Load the local image tile then sync
-    for (j=0; j<TILE_WIDTH; j++){
-        for (k=0; k<TILE_WIDTH; k++){
+    // Load the local image tile
+    //j = threadIdx.y;
+    //k = threadIdx.x;
+    //if(glob_x < C && glob_y < R){
+    //        // desc:[loc within tile ]       (            tile_y + global-y-offset            )   ( tile_x + global-x-offset )
+    //        img_tile[j][k] = img[(j + blockIdx.y*blockDim.y)*(gridDim.x*blockDim.x) + (k + blockIdx.x*blockDim.x)];
+    //}
+    //__syncthreads();
+    for(j=0; j<TILE_WIDTH; j++){
+        for(k=0; k<TILE_WIDTH; k++){
             // desc:[loc within tile ]       (            tile_y + global-y-offset            )   ( tile_x + global-x-offset )
             img_tile[j][k] = img[(j + blockIdx.y*blockDim.y)*(gridDim.x*blockDim.x) + (k + blockIdx.x*blockDim.x)];
         }
     }
-    __syncthreads();
 
     // check within global boundaries, then for each tile, count them up into local bins
-    if(glob_idx < R*C){
-        ++bins_loc[img_tile[threadIdx.y][threadIdx.x]];
+    //if(glob_x < C && glob_y < R)
+    //    ++bins_loc[img_tile[threadIdx.y][threadIdx.x]];
+    //__syncthreads();
+    for(j=0; j<TILE_WIDTH; j++){
+        for(k=0; k<TILE_WIDTH; k++){
+            if(tile_idx==0) // once per tile!
+                ++bins_loc[img_tile[j][k]];
+        }
     }
     __syncthreads();
 
     // Add tiled results to global output (once per tile!)
-    if(tile_idx==255){
+    if(tile_idx==0){
         for (k=0; k<256; k++)
             atomicAdd(&bins[k], bins_loc[k]);
     }
@@ -105,15 +119,18 @@ __global__ void opt_hist(unsigned char*img, unsigned int *bins,
 """
 
 #########################################
-## First Histogram Kernel Optimization ##
+############ Functions ##################
 #########################################
+
+def rmse(predictions, targets):
+    return np.sqrt(((predictions - targets) ** 2).mean())
 
 ###########################
 ## END Histogram Kernels ##
 ###########################
 
 # Configurations
-version="OPTIMIZED"
+version="NAIVE"
 
 # Time Python function:
 start = time.time()
@@ -144,12 +161,12 @@ if version=="NAIVE":
     # naive_hist(img_gpu.data, bin_gpu.data, np.uint32(32), block=(1,), grid=(N/32,), shared=shared_mem)
     naive_hist(img_gpu, bin_gpu, np.uint32(32), block=(1,1,1), grid=(N/32,1,1))
 else:
-    opt_hist(img_gpu, bin_gpu, np.uint32(P), np.uint32(R), np.uint32(C), block=(16,16,1), grid=(R/16,C/16,1))
+    opt_hist(img_gpu, bin_gpu, np.uint32(P), np.uint32(R), np.uint32(C), block=(16,16,1), grid=(C/16,R/16,1))
 print time.time()-start
 h_op =  bin_gpu.get()
 
 # Check naive correctness:
 print np.allclose(h_py, h_op)
-
+print rmse(h_py, h_op)
 print "PY: ", h_py
 print "CU: ", h_op
