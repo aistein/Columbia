@@ -17,7 +17,8 @@ def hist(x):
     return bins
 
 # Create input image containing 8-bit pixels; the image contains N = R*C bytes;
-P = 32
+# P = 32
+P = 4096
 R = P*2
 C = P*3
 N = R*C
@@ -59,7 +60,7 @@ __global__ void naive_hist(unsigned char *img, unsigned int *bins,
 __global__ void opt_hist(unsigned char*img, unsigned int *bins,
                         const unsigned int P, const unsigned int R, const unsigned int C) {
 
-    // P - warp size (32)
+    // P - warp size
     // R - total num of image rows
     // C - total num of image cols
 
@@ -83,25 +84,14 @@ __global__ void opt_hist(unsigned char*img, unsigned int *bins,
         }
     }
 
-    // Load the local image tile
-    //j = threadIdx.y;
-    //k = threadIdx.x;
-    //if(glob_x < C && glob_y < R){
-    //        // desc:[loc within tile ]       (            tile_y + global-y-offset            )   ( tile_x + global-x-offset )
-    //        img_tile[j][k] = img[(j + blockIdx.y*blockDim.y)*(gridDim.x*blockDim.x) + (k + blockIdx.x*blockDim.x)];
-    //}
-    //__syncthreads();
+    // Load the local image tile, use strides
     for(j=0; j<TILE_WIDTH; j++){
         for(k=0; k<TILE_WIDTH; k++){
-            // desc:[loc within tile ]       (            tile_y + global-y-offset            )   ( tile_x + global-x-offset )
             img_tile[j][k] = img[(j + blockIdx.y*blockDim.y)*(gridDim.x*blockDim.x) + (k + blockIdx.x*blockDim.x)];
         }
     }
 
     // check within global boundaries, then for each tile, count them up into local bins
-    //if(glob_x < C && glob_y < R)
-    //    ++bins_loc[img_tile[threadIdx.y][threadIdx.x]];
-    //__syncthreads();
     for(j=0; j<TILE_WIDTH; j++){
         for(k=0; k<TILE_WIDTH; k++){
             if(tile_idx==0) // once per tile!
@@ -130,12 +120,15 @@ def rmse(predictions, targets):
 ###########################
 
 # Configurations
+# version="OPTIMIZED"
 version="NAIVE"
+runpy=False
 
 # Time Python function:
-start = time.time()
-h_py = hist(img)
-print time.time()-start
+if runpy:
+    start = time.time()
+    h_py = hist(img)
+    print time.time()-start
 
 # Time Naive OpenCL function:
 
@@ -160,13 +153,18 @@ start = time.time()
 if version=="NAIVE":
     # naive_hist(img_gpu.data, bin_gpu.data, np.uint32(32), block=(1,), grid=(N/32,), shared=shared_mem)
     naive_hist(img_gpu, bin_gpu, np.uint32(32), block=(1,1,1), grid=(N/32,1,1))
-else:
-    opt_hist(img_gpu, bin_gpu, np.uint32(P), np.uint32(R), np.uint32(C), block=(16,16,1), grid=(C/16,R/16,1))
+else: # else do the optimized version
+    # opt_hist(img_gpu, bin_gpu, np.uint32(R), np.uint32(C), block=(16,16,1), grid=(C/16,R/16,1))
+    opt_hist(img_gpu, bin_gpu, np.uint32(32), np.uint32(R), np.uint32(C), block=(16,16,1), grid=(C/16,R/16,1))
 print time.time()-start
 h_op =  bin_gpu.get()
 
 # Check naive correctness:
-print np.allclose(h_py, h_op)
-print rmse(h_py, h_op)
-print "PY: ", h_py
+print version
+
+if runpy:
+    print np.allclose(h_py, h_op)
+    print rmse(h_py, h_op)
+    print "PY: ", h_py
+
 print "CU: ", h_op
