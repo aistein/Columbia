@@ -161,7 +161,8 @@ def test_instance(_version_="NAIVE", _testsize_="1KB", _P_=1536, _runpy_=False, 
         img_gpu = cl.array.to_device(queue, img)
         start = time.time()
         opt1_hist(queue, (C,R,), (16,16,), img_gpu.data, bin_gpu.data, 32, R, C)
-    print "opencl time taken: ",time.time()-start
+    runtime = time.time()-start
+    print "opencl time taken: ",runtime
     h_op =  bin_gpu.get()
     h_op[0] = N/256
     # NOTE: had to fudge elemnt zero of the output, because it was an outlier screwing up RMSE
@@ -177,6 +178,8 @@ def test_instance(_version_="NAIVE", _testsize_="1KB", _P_=1536, _runpy_=False, 
         print "results correct? ", np.allclose(h_py, h_op)
         print "root-mean-square-error between results: ", rmse(h_py, h_op)
 
+    return runtime
+
 ###########################
 ########## MAIN ###########
 ###########################
@@ -185,7 +188,7 @@ print "====================== 1-KB TEST =========================="
 print "-I- Testing Naive Kernel"
 test_instance(_version_="NAIVE",_testsize_="1KB",_P_=32, _runpy_=True, _print_=True)
 print "-I- Testing Optimized Kernel"
-test_instance(_version_="NAIVE",_testsize_="1KB",_P_=32, _runpy_=True, _print_=True)
+test_instance(_version_="OPTIMIZED",_testsize_="1KB",_P_=32, _runpy_=True, _print_=True)
 print "====================== 1-MB TEST =========================="
 print "-I- Testing Naive Kernel"
 test_instance(_version_="NAIVE",_testsize_="1MB",_P_=416, _runpy_=True, _print_=True)
@@ -211,3 +214,33 @@ print "-I- Testing Naive Kernel"
 test_instance(_version_="NAIVE",_testsize_="500MB",_P_=9120)
 print "-I- Testing Optimized Kernel"
 test_instance(_version_="OPTIMIZED",_testsize_="500MB",_P_=9120)
+
+# print "====================== Making Plot =========================="
+#
+# naive_times = []
+# opt_times = []
+# for K in range(1,281,20):
+#
+#     ntime = test_instance(_version_="NAIVE",_P_=32*K)
+#     otime = test_instance(_version_="OPTIMIZED",_P_=32*K)
+#     naive_times.append(ntime)
+#     opt_times.append(otime)
+#
+# # Make the Plot
+# import matplotlib as mpl
+# mpl.use('agg')
+# import matplotlib.pyplot as plt
+# px = list(xrange(len(naive_times)))
+# cx = list(xrange(len(opt_times)))
+#
+# plt.gcf()
+# plt.plot(px, naive_times, color='r', label='Naive Kernel')
+# plt.plot(cx, opt_times, color='g', label='Optimized Kernel')
+#
+# plt.xlabel('size of image')
+# plt.ylabel('time')
+# plt.legend(loc='upper left')
+# plt.title('Histogram Kernel Optimization: OPENCL')
+# plt.gca().set_xlim((min(px), max(px)))
+# plt.gca().set_ylim((min(naive_times)/2, max(opt_times)*3))
+# plt.savefig('opencl_hist_times.png')
