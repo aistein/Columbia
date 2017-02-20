@@ -1,0 +1,16 @@
+
+let m = StringMap.empty
+let m = StringMap.add "hello" 1 m
+let m = StringMap.add "world" 2 m
+let m = StringMap.add "I" 3 m
+let m = StringMap.add "am" 4 m
+let m = StringMap.add "Alex" 5 m
+
+let kv_to_list k v l =
+  (k,v)::l
+
+StringMap.fold kv_to_list m []
+or
+StringMap.fold (fun k v l -> (k,v)::l) m []
+
+List.sort (fun (c1,_) (c2,_) -> Pervasives.compare c2 c1) (StringMap.fold (fun k v l -> (k,v)::l) m [])
