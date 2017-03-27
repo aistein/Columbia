@@ -1,0 +1,29 @@
+user@User-PC:~/Desktop/Columbia/COMS4115/HW1/calculator$ ./calc_compile_run
+12 states, 271 transitions, table size 1156 bytes
+$a = 5, $b = $c = $d = 6, 1 + $a / $c + $d * 7
+43
+
+user@User-PC:~/Desktop/Columbia/COMS4115/HW1/calculator$ ./calc_compile_run
+12 states, 271 transitions, table size 1156 bytes
+$a = 3, $c = $b = 6, $a * $b + $c
+24
+
+user@User-PC:~/Desktop/Columbia/COMS4115/HW1/calculator$ ./calc_compile_run
+12 states, 271 transitions, table size 1156 bytes
+$a, $b, $c
+0
+
+user@User-PC:~/Desktop/Columbia/COMS4115/HW1/calculator$ ./calc_compile_run
+12 states, 271 transitions, table size 1156 bytes
+$a = 1000, $a/0
+Fatal error: exception Division_by_zero
+
+user@User-PC:~/Desktop/Columbia/COMS4115/HW1/calculator$ ./calc_compile_run
+12 states, 271 transitions, table size 1156 bytes
+$a = 1000, $a/-1
+Fatal error: exception Parsing.Parse_error
+
+user@User-PC:~/Desktop/Columbia/COMS4115/HW1/calculator$ ./calc_compile_run
+12 states, 271 transitions, table size 1156 bytes
+$a = 1000, $b = 0 - 1, $a / $b
+-1000

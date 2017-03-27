@@ -1,0 +1,42 @@
+user@User-PC:~/Desktop/Columbia/COMS4115/HW1/word_frequency_counter$ ocamllex word_frequency_counter.mll
+4 states, 315 transitions, table size 1284 bytes
+user@User-PC:~/Desktop/Columbia/COMS4115/HW1/word_frequency_counter$ ocamlc -o word_frequency_counter wfc_setup.ml word_frequency_counter.ml
+user@User-PC:~/Desktop/Columbia/COMS4115/HW1/word_frequency_counter$ ./word_frequency_counter < word_frequency_counter.mll
+         z   1
+     words   1
+  wordlist   2
+      word   2
+      with   1
+      type   1
+     token   4
+    string   1
+     stdin   1
+     setup   1
+         s   2
+      rule   1
+       rec   1
+     print   1
+     parse   1
+      open   1
+        of   1
+      next   3
+     match   1
+    lexbuf   3
+       let   3
+         l   3
+        in   3
+      from   1
+       eof   1
+     empty   1
+    counts   1
+     count   1
+   channel   1
+        as   1
+         a   1
+         Z   1
+      Word   3
+       Wfc   1
+ StringMap   1
+    Lexing   1
+       EOF   3
+         A   1

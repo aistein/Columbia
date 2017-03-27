@@ -1,0 +1,48 @@
+Submitter: Alexander Stein (as5281)
+Document: HW1, README
+Course: COMSW4115 Programming Languages and Translators
+Professor Stephen A. Edwards
+
+Delivery Notes:
+--------------
+(Question 1: Pair Swap) ->
+    Directory: pair_swap
+    Files:
+    - pair_swap.ml
+        + contains my solution in OCaml
+    - pair_swap_demo.log
+        + a recording of an OCaml shell session with my results
+
+(Question 2: Word Frequency Counter) ->
+    Directory: word_frequency_counter
+    Files:
+    - wfc_setup.ml
+        + contains all the functions used manipulate "wordlist"
+    - word_frequency_counter.mll
+        + contains given code with modifications,
+          opens the (necessarily pre-compiled) module "Wfc_setup"
+    - word_frequency_counter_demo.log
+        + demonstrates generation of *.ml files, compilation, and execution with
+          results from the Linux command-line
+    - wfc_compile_run (executable)
+        + bash script for joint compile & run of this program
+
+(Question 3: Add Variables & Sequences to Calculator )
+    Directory: calculator
+    Files:
+    - ast.mli
+        + defines types and expressions
+    - parser.mly
+        + defines context-free grammar for calculator
+    - scanner.mll
+        + maps acceptable input characters to internal representation used by
+          the interpreter
+    - calc.ml
+        + defines machine actions for each operation listed in the parser,
+          and retrieves standard input
+    - calculator_demo.log
+        + demonstrates test cases and outputs for the calculator program from
+          the Linux command-line
+    - calc_compile_run (executable)
+        + bash script for joint compile & run of this program (it will wait
+          for you to enter acceptable standard input)

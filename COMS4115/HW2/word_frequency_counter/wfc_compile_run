@@ -1,0 +1,3 @@
+ocamllex word_frequency_counter.mll
+ocamlc -o word_frequency_counter wfc_setup.ml word_frequency_counter.ml
+./word_frequency_counter < word_frequency_counter.mll

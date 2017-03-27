@@ -1,0 +1,17 @@
+OCaml version 4.02.3
+
+# #use "pair_swap.ml";;
+val pair_swap_ntr : 'a list -> 'a list = <fun>
+val pair_swap_tr : 'a list -> 'a list = <fun>
+# pair_swap_ntr [];;
+- : 'a list = []
+# pair_swap_ntr [1];;
+- : int list = [1]
+# pair_swap_ntr [1;2;3;4;5];;
+- : int list = [2; 1; 4; 3; 5]
+# pair_swap_tr [];;
+- : 'a list = []
+# pair_swap_tr [1];;
+- : int list = [1]
+# pair_swap_tr [1;2;3;4;5];;
+- : int list = [2; 1; 4; 3; 5]
