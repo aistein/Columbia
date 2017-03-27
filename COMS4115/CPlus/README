@@ -1,0 +1,3 @@
+### How to copy a file into the AWS instance
+
+scp -i "plt_final_project.pem" <file> ubuntu@ec2-54-164-64-195.compute-1.amazonaws.com:/home/ubuntu/plt_source/plt_c-graph
