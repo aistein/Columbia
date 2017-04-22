@@ -1,2 +1,1 @@
-ssh -i "plt_final_project.pem" ubuntu@ec2-54-164-64-195.compute-1.amazonaws.com
-
+ssh -i "plt_final_project.pem" ubuntu@ec2-52-54-100-47.compute-1.amazonaws.com
