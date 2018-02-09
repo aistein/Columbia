@@ -1,0 +1,26 @@
+#################
+#Temporary files#
+#################
+*.swp
+*.pyc
+.env/*
+
+
+###############
+# Data  files #
+###############
+data/*
+
+###############
+# Other files #
+###############
+.ipynb_checkpoints/*
+ref/*
+test.ipynb
+__pycache__/*
+.idea/*
+
+###################
+# Tensorflow data #
+###################
+*.data-00000-of-00001
