@@ -26,6 +26,10 @@ s_x = np.std(animal_data1[:,0])
 y_hat = np.mean(animal_data1[:,1])
 s_y = np.std(animal_data1[:,1])
 
+for animal in animal_data1:
+    animal[0] = np.log(animal[0])
+
+
 # calculate the linear model parameters SxY, Sxx, SYY, and use them to
 # find the estimators A and B, the correlation, and the residuals
 S_xY = S_xx = S_YY = 0.0
@@ -44,7 +48,7 @@ print("s_x =", s_x)
 print("y_hat =", y_hat)
 print("s_y =", s_y)
 print("R_sq =", R_sq)
-print("r = ",r)
+print("r =",r)
 print("S_YY =", S_YY)
 print("SS_R =", SS_R)
 
@@ -56,3 +60,18 @@ for i in range(0,n-1):
     Yi = animal_data1[i,1]
     Xi = animal_data1[i,0]
     residuals[i] = (Yi - A - B * Xi) / (SS_R / (n - 2))
+
+plt.subplot(2,1,1)
+plt.plot(animal_data1[:,0], np.zeros((n)), color='red')
+plt.scatter(animal_data1[:,0], residuals, color='green')
+plt.ylabel("normalized residual")
+plt.title("Linear Regression: Brain vs. Body Weight")
+
+plt.subplot(2,1,2)
+plt.plot(animal_data1[:,0], A + B * (animal_data1[:,0]), color='red')
+plt.scatter(animal_data1[:,0], animal_data1[:,1], color='blue')
+plt.ylabel("brain-weight (g)")
+plt.xlabel("body-weight (kg)")
+
+plt.savefig('residuals_1f.png')
+plt.show()
