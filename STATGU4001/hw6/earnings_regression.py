@@ -20,7 +20,7 @@ earnings_data = np.genfromtxt('heights.csv', delimiter=',', dtype=np.float32)
 
 # part a: transform earnings into log-earnings
 for person in earnings_data:
-    person[1] = np.log2(person[1])
+    person[1] = np.log(person[1])
     person[2] = 12 * person[2] + person[3] # convert to inches
     # print("height: ", person[2], "\" log-earn: ", person[1])
 
@@ -47,13 +47,16 @@ r = S_xY / (np.sqrt(S_xx * S_YY))
 print("x_hat =", x_hat)
 print("s_x =", s_x)
 print("y_hat =", y_hat)
+print("e^(y_hat) =", np.exp(y_hat))
 print("s_y =", s_y)
+print("e^(s_y) =", np.exp(s_y))
 print("R_sq =", R_sq)
 print("r =",r)
 print("S_YY =", S_YY)
 print("SS_R =", SS_R)
 
 print("Linear model Y = A + Bx, with A=", A, " and B=", B)
+print("Increase in $-earnings/in is ", np.exp(B)*100 - 100, "%")
 
 # calculate and plot the normalized residuals
 residuals = np.zeros((n),dtype=np.float32)
@@ -74,5 +77,5 @@ plt.scatter(earnings_data[:,2], earnings_data[:,1], color='blue')
 plt.ylabel("earnings (log-dollars)")
 plt.xlabel("height (in)")
 
-plt.savefig('residuals_2a.png')
+plt.savefig('residuals_2c.png')
 plt.show()
