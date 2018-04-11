@@ -19,16 +19,16 @@ import matplotlib.pyplot as plt
 
 animal_data1 = np.genfromtxt('AnimalWeights.csv', delimiter=',')
 
+for animal in animal_data1:
+    animal[1] = np.log2(animal[1])
+    animal[0] = np.log2(animal[0])
+
 # x - body_weight, y - brain_weight
 n = animal_data1.shape[0]
 x_hat = np.mean(animal_data1[:,0])
 s_x = np.std(animal_data1[:,0])
 y_hat = np.mean(animal_data1[:,1])
 s_y = np.std(animal_data1[:,1])
-
-for animal in animal_data1:
-    animal[0] = np.log(animal[0])
-
 
 # calculate the linear model parameters SxY, Sxx, SYY, and use them to
 # find the estimators A and B, the correlation, and the residuals
@@ -73,5 +73,5 @@ plt.scatter(animal_data1[:,0], animal_data1[:,1], color='blue')
 plt.ylabel("brain-weight (g)")
 plt.xlabel("body-weight (kg)")
 
-plt.savefig('residuals_1f.png')
+plt.savefig('residuals_1e.png')
 plt.show()
