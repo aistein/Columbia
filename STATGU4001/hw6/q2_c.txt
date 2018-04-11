@@ -1,0 +1,30 @@
+
+MALE LINEAR MODEL
+
+x_hat = 70.0815
+s_x = 2.93049
+y_hat = 10.0237
+e^(y_hat) = 22555.7
+s_y = 0.818432
+e^(s_y) = 2.26694
+R_sq = 0.00717072054604
+r = 0.0846801071447
+S_YY = 335.171431985
+SS_R = 332.768011311
+Linear model Y = A + Bx, with A= 8.36983375551  and B= 0.0235997891944
+Increase in $-earnings/in is  2.3880467856 %
+
+FEMALE LINEAR MODEL
+
+x_hat = 64.6082
+s_x = 2.5817
+y_hat = 9.48841
+e^(y_hat) = 13205.7
+s_y = 0.92711
+e^(s_y) = 2.5272
+R_sq = 0.0022138381126
+r = 0.0470514411321
+S_YY = 587.669529727
+SS_R = 586.368524524
+Linear model Y = A + Bx, with A= 8.3969403178  and B= 0.0168936159818
+Increase in $-earnings/in is  1.70371200744 %
