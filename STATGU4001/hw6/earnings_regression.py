@@ -1,5 +1,7 @@
 import csv
 import numpy as np
+from numpy.linalg import inv
+from numpy import matmul
 import matplotlib.pyplot as plt
 
 # 2. The included data is earnings as a function of height.
@@ -73,7 +75,7 @@ def linear_model( earnings_data , namestring , print_stats=True):
     plt.ylabel("earnings (log-dollars)")
     plt.xlabel("height (in)")
 
-    plt.savefig('residuals_2c_' + namestring + '.png')
+    plt.savefig('residuals_' + namestring + '.png')
     plt.close()
 
     return (A, B)
@@ -86,7 +88,7 @@ def prediction(Xi,params):
 
 earnings_data = np.genfromtxt('heights.csv', delimiter=',', dtype=np.float32)
 
-# part a: transform earnings into log-earnings
+# part a: transform earnings into log-earnings, and feet into inches
 for person in earnings_data:
     person[1] = np.log(person[1])
     person[2] = 12 * person[2] + person[3] # convert to inches
@@ -123,7 +125,7 @@ for woman in earnings_female:
     woman[1] = prediction(woman[2],f_params)
     earnings_predictions.append(woman)
 earnings_predictions = np.asarray(earnings_predictions)
-print("\nJOINT MODEL\n")
+print("\nCOMBINED MODEL\n")
 j_params = linear_model(earnings_predictions, "Joint", print_stats=False)
 
 #finally plot the joint model against the original data
@@ -146,4 +148,28 @@ plt.ylabel("earnings (log-dollars)")
 plt.xlabel("height (in)")
 
 plt.savefig('residuals_2e_Joint.png')
-plt.show()
+
+# BONUS - To calculate the multiple linear model here we'll use matrices
+# X[height, male/female (1/0)]
+print("\nMULTILINEAR MODEL\n")
+n = earnings_data.shape[0]
+X = np.append(np.ones((n,1), dtype=np.float32), earnings_data[:,[2,4]],1)
+Y = earnings_data[:,1]
+# B[0]=A, B[1]=slope of x1 (height), B[2]=slope of x2 (sex)
+B = matmul(inv(matmul(X.T,X)), matmul(X.T,Y))
+# r= residuals
+r = Y - matmul(X,B)
+SS_R = matmul(r.T,r)
+y_hat = np.mean(earnings_data[:,1])
+S_YY = 0.0
+for person in earnings_data:
+    S_YY += (person[1] - y_hat)**2
+R_sq = 1 - SS_R / S_YY
+print("average height: ", np.mean(earnings_data[:,2]))
+print("average sex: ", np.mean(earnings_data[:,4]))
+print("average income: ", np.exp(y_hat))
+print("R^2: ", R_sq)
+print("Linear model Y = A + B1*x1 + B2*x2, with A=",
+        B[0], " and B1=", B[1], " and B2=", B[2])
+print("Increase in $-earnings/in w.r.t height is ", np.exp(B[1])*100 - 100, "%")
+print("Increase in $-earnings/in w.r.t sex is ", B[2]*100, "%")
