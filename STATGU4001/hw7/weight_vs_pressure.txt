@@ -1,0 +1,18 @@
+x_hat = 181.6
+s_x = 23.9695640344
+y_hat = 144.2
+s_y = 13.0560330882
+R_sq = 0.484671383112
+r = 0.696183440705
+S_YY = 2743.56
+SS_R = 1413.83498015
+Linear model Y = A + Bx, with A= 70.531023831  and B= 0.405666168332
+
+Null Hypotheseis: weight does not affect systolic blood pressure
+--> T_obs =  4.11450705689
+--> T_crit =  1.73406360662
+--> P_value =  0.999674563532
+ -- Reject the Null -- 
+
+We are 95% confident that for a sample of a large number of 182lb males
+Systolic blood pressure will be:  144.362266467  +/-  4.22263997568

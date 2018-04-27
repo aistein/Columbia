@@ -1,0 +1,14 @@
+x_hat = 2554.63636364
+s_x = 678.549559083
+y_hat = 19.4872727273
+s_y = 4.21254639232
+R_sq = 0.610353491513
+r = 0.781251234567
+S_YY = 193.631692562
+SS_R = 75.4479129392
+Linear model Y = A + Bx, with A= 7.03748757353  and B= 0.00487340794602
+Null Hypotheseis: cigarette consumption does not affect death-rate
+--> T_obs =  3.7547115349
+--> T_crit =  1.83311293265
+--> P_value =  0.997739144166
+ -- Reject the Null -- 
