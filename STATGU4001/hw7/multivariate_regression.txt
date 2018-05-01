@@ -1,0 +1,2 @@
+H0: When weight is known, Age doesn't affect blood pressure --> p-value =  0.546191047648
+H0: Age doesn't affect blood pressure --> p-value =  0.544948334362

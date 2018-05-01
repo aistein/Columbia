@@ -1,0 +1,415 @@
+\documentclass[10pt, letterpaper, twosided]{article}
+
+\usepackage{fancyhdr}
+\usepackage{enumerate}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{fullpage}
+\usepackage{amsmath}
+\usepackage{gensymb}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{float}
+\usepackage{tikz}
+\usepackage{pgf}
+\usepackage{cancel}
+
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+\usetikzlibrary{positioning}
+\usetikzlibrary{decorations.markings}
+\usetikzlibrary{angles,quotes}
+\usetikzlibrary{shapes,snakes}
+
+
+\usepackage{datetime} % \today at \currenttime
+
+
+\graphicspath{ {Images/} }
+
+
+\setcounter{section}{0}
+
+\fancyhead{}
+\fancyfoot{}
+
+\pagestyle{fancy} % Calling the package
+
+%\fancyhead[CO,CE]{CHM 469 EXAM I}
+\fancyfoot[C]{\thepage}
+\fancyfoot[R] {Alexander Stein}
+\fancyfoot[L] {Algorithms -- HW6}
+%\fancyhead[C] {REVISED COPY, QUESTION 5: MC CODEUP}
+
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\graphicspath{ {Images/} }
+
+\newcommand{\veca}{\mathbf{a}}
+\newcommand{\vecF}{\mathbf{F}}
+\newcommand{\vecr}{\mathbf{r}}
+\newcommand{\vecx}{\mathbf{x}}
+\newcommand{\vecp}{\mathbf{p}}
+\newcommand{\vecv}{\mathbf{v}}
+\newcommand{\vecq}{\mathbf{q}}
+\newcommand{\vecn}{\mathbf{n}}
+\newcommand{\vecf}{\mathbf{f}}
+\newcommand{\vecy}{\mathbf{y}}
+\newcommand{\vecz}{\mathbf{z}}
+\newcommand{\vecL}{\mathbf{L}}
+\newcommand{\vecA}{\mathbf{A}}
+\newcommand{\vecE}{\mathbf{E}}
+\newcommand{\vecH}{\mathbf{H}}
+\newcommand{\vecR}{\mathbf{R}}
+\newcommand{\vecg}{\mathbf{g}}
+\newcommand{\vecJ}{\mathbf{J}}
+\newcommand{\veck}{\mathbf{k}}
+\newcommand{\vecV}{\mathbf{V}}
+\newcommand{\vecN}{\mathbf{N}}
+\newcommand{\vecT}{\mathbf{T}}
+\newcommand{\vectau}{\boldsymbol{\tau}}
+\newcommand{\vecomega}{\boldsymbol{\omega}}
+\newcommand{\vecmu}{\boldsymbol{\mu}}
+\newcommand{\hcal}{\mathcal{H}}
+\newcommand{\dif}{\text{d}}
+\newcommand{\vecs}{\mathbf{s}}
+
+%% for section styles
+\usepackage{titlesec}
+
+\titleformat*{\section}{\small\bfseries}
+\titleformat*{\subsection}{\Large\bfseries}
+\titleformat*{\subsubsection}{\large\bfseries}
+\titleformat*{\paragraph}{\large\bfseries}
+\titleformat*{\subparagraph}{\large\bfseries}
+
+\renewcommand{\thesection}{\Roman{section}} 
+%% 
+
+%\usepackage[top=1.875in,bottom=1.875in,left=1.875in,right=1.875in,asymmetric]{geometry}
+
+% LaTeX's margins are, by default, 1.5 inches wide on 12pt documents, 1.75 inches wide on 11pt documents, and 1.875 inches wide on 10pt documents. This is the standard for book margins.
+
+\begin{document}
+
+\thispagestyle{empty}
+
+\noindent \textbf{CSOR 4231 - Introduction to Algorithms HW \#6}
+
+\noindent Alexander Stein (\emph{as5281@columbia.edu})
+
+\noindent due 30 April 2018 at 8:00 PM\\
+
+\noindent \emph{Collaborators: Matthew Carbone, Atishay Seghal}\\
+
+\emph{\textbf{Problem 1 Statement.}} A large store has $m$ customers and
+$n$ products and maintains an $m \times n$ matrix $A$ such that
+$A_{ij} = 1$ if customer$i$ has purchased product $j$; otherwise,  $A_{ij} = 0$.
+Two customers are called $orthogonal$ if they did not purchase any products in common.
+Your task is to help the store determine a maximum subset of orthogonal customers.
+Give an efficient algorithm for this problem or state its decision version and prove it is $NP$-complete.\\
+
+\emph{\textbf{Problem 1 Solution.}} We posit that this problem is $NP$-complete.  Its decision version 
+can be stated as follows:
+$$ \text{CUST-ORTH}(D) : \text{find a set of orthogonal customers of size} \geq k.$$
+Our proof requires two steps: (1) show CUST-ORTH(D) $\in$ NP; (2) show that
+ IS(D) $\leq_{p}$ CUST-ORTH(D).\\
+ 
+\textit{Step 1:}
+Let us have the certification algorithm CUST-ORTH-CERT(A, S, k), where A 
+is the original matrix, the certificate S is a collection of customers s.t. 
+$S_{i} \bot S_{j}, \forall i,j \in m \times n$, and k is the minimum number of such sets required.
+\begin{algorithm}
+\caption{certify that the given certificate solves CUST-ORTH(D)}\label{ram}
+\begin{algorithmic}[1]
+\Procedure{CUST-ORTH-CERT}{$A,S,k$}
+   \If{$size(S)\leq k$}
+      \State \textbf{return} NO
+   \EndIf
+   \For{$i=1$ to $n$}
+      \For{$j=1$ to $m$}
+         \If{$j \neq i$ and $S_j \cancel{\bot} S_i$}
+            \State \textbf{return} NO
+         \EndIf
+      \EndFor
+   \EndFor
+   \State \textbf{return} YES
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}\\
+It is trivial to see that this algorithm runs in $O(mn^2)$ time, which is polynomial in the size of the input. 
+Thus, $CUST-ORTH(D) \in NP$.\\
+
+\textit{Step 2:}
+It is known that the independent-set decision problem (IS(D)) is $NP$-complete. Input to IS(D) is the graph $G(V,E)$,
+and the value $k$. Broadly, we'll map edges to products and vertices to customers.
+We define our reduction procedure, $R$, from IS(D) to CUST-ORTH(D) as follows:
+\begin{itemize}
+\item Let $m=|E|$ and $n=|V|$; our $A$ will be size $n \times m$ and initially zero
+\item For each edge $e \in E$, give a numeric label to that edge, this will be its column-index $j$ in $A$
+\item For each vertex $u \in V$, give a numeric label to that vertex, this will be its row-index $i$ in $A$
+\item For each edge $e=(u,v) \in E$, $A_{ue}=1$ and $A_{ve}=1$, where $e,u,v$ are indices as specified above
+\item the $k$ value remains the same for both problems
+\end{itemize}
+Clearly this takes only polynomial time to translate the inputs.  Now it remains to show that - under this translation - 
+there is an independent-set of size $\geq k$ for IS(D) $\iff$ there is an orthogonal set of customers of size $\geq k$ 
+for CUST-ORTH(D).\\
+
+$\Longrightarrow$ Suppose there is an independent-set of size $k$ for IS(D).  For all pairs of vertices selected from the generated independent set, say $u$ and $v$, we have that $e=(u,v) \cancel{\in} E$.  Thus in $A$, the entries 
+$A_{ue}=0$ and $A_{ve}=0$ will be created.  Since the column's of $A$ represent edges, 
+and one edge connects two vertices, either both $A_{ae}=1$ and $A_{be}=1$ or both are 0. There 
+cannot be some $A_{ij}=1$ and $A_{kj}=1$ if there is no edge (i,j); And there are no edges (i,j) 
+between any vertices i and j of the independent-set.  So, under $R$, there will be at least $k$ row vectors which are all mutually orthogonal.\\
+
+$\Longleftarrow$ Suppose there is a set of $k$ orthogonal customers for CUST-ORTH(D).  As described above, there can
+only be two 1's in the same column of $A$ if there was originally an edge in G connecting the two vertices corresponding to
+these customers.  For every pair $a$ and $b$ of customers in the orthogonal set, $A_{aj}=1 \implies A_{bj}=0$ (and vice. versa) for $j=1,2,...,n$, .  This implies that there could not have been any edges connecting the corresponding vertices of $a$ and $b$ in $G$.  Thus, the set of $k$ orthogonal customers correspond exactly to $k$ vertices in $G$ for which no two are connected by an edge - an independent set.\\
+
+Now we may conclude that CUST-ORTH(D) $\in NPC$. $\blacksquare$\\
+
+\newpage
+
+\emph{\textbf{Probelm 2 Statement.}} Suppose you had a polynomial-time algorithm that, on an input graph, answers
+\emph{\textbf{yes}} if and only if the graph has a Hamiltonian cycle.  Show how, on an input graph $G=(V,E)$, you can return 
+in polynomial time
+\begin{itemize}
+\item a Hamiltonian cycle in G, if one exists,
+\item \emph{\textbf{no}}, if $G$ does not have a Hamiltonian cycle.
+\end{itemize}
+
+\emph{\textbf{Problem 2 Solution.}} The general idea here is to examine one edge of G at a time.  We look at the graph 
+$G' = (V, E-\{e\})$  and if HAS-HAM($G'$) = \emph{\textbf{yes}}, then we can throw that edge away because $G'$ still has some Hamiltonian cycle. If it returns \emph{\textbf{no}}, then we conclude that the edge we just removed must have been in every remaining Hamiltonian cycle - put it back in the graph, but mark it as visited so we do not repeat this check.
+
+\begin{algorithm}
+\caption{use the HAS-HAM(G) "magic" algorithm to return a Hamiltonian cycle efficiently}\label{ram}
+\begin{algorithmic}[1]
+\Procedure{GET-HAM}{$G=(V,E)$}
+   \If{HAS-HAM(G) = \emph{\textbf{no}}}
+      \State \textbf{return} \emph{\textbf{no}}
+   \EndIf
+   \State Let $crit$ be a bit-vector of length $|E|$ initialized to zeros
+   \While{$|E| > |V|$}
+      \State Let $e$ be some edge s.t. $e \in E$ and $crit[e]=0$
+      \If{HAS-HAM($G'=(V,E - \{e\})$) = \emph{\textbf{yes}}}
+         \State remove $e$ from $E$
+      \Else
+         \State $crit[e] = 1$
+      \EndIf
+   \EndWhile
+   \State \textbf{return} E
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+First notice that we may terminate when only $|V|$ edges remain, because a simple cycle has exactly $|V|$ edges.  Next,
+note that the $crit$ indicator for an edge is only set to 1 if that edge must be in a Hamiltonian cycle.  Upon termination, the 
+E set returned will contain only those edges that are in a Hamiltonian cycle, if one exists.
+
+If we let the running of time for HAS-HAM(G) be indicated by H(t), which we know to be polynomial, then the running time
+of GET-HAM(G) is $O(mH(t))$, which is also polynomial by composition.\\
+
+\newpage
+
+\emph{\textbf{Problem 3 Statement.}} There is a set of ground elements $E={e_1,e_2,...,e_n}$ and a collection of $m$ subsets $S_1, S_2,...,S_m$ of the ground elements (that is, $S_i \subseteq E \text{ for } 1 \leq i \leq m$).  The goal is
+to select a minimum cardinality set $A$ of ground elements such that $A$ contains at least one element from each 
+subset $S_i$.  State the decision version of this problem and prove that it is $NP$-complete.\\
+
+\emph{\textbf{Problem 3 Solution.}} Its decision version can be stated as follows:
+$$ \text{SUBSET-COVER(D)} : \text{find a subset $A$ as stated above of size} \leq k$$
+Our proof requires two steps: (1) show SUBSET-COVER(D) $\in$ NP; (2) show that
+VC(D) $\leq_{p}$ CUST-ORTH(D).\\
+
+\textit{Step 1:}
+Let us have the certification algorithm SUBSET-COVER-CERT(E, S, A, k), where E 
+is the original ground-element-set, S the original collection of subsets, the certificate is A $\subseteq$ E, 
+and k is the maximum size of A allowed.
+\begin{algorithm}
+\caption{certify that the given certificate solves SUBSET-COVER(D)}\label{ram}
+\begin{algorithmic}[1]
+\Procedure{SUBSET-COVER-CERT}{$E, S, A, k$}
+   \If{$size(A)\geq k$}
+      \State \textbf{return} NO
+   \EndIf
+   \State Let $X$ be an array of $|S|$ booleans, false-initialized
+   \For{$i=1$ to $|S|$}
+      \For{$j=1$ to $|A|$}
+         \If{$A[j] \in S_i$}
+            \State $X[i] = true$
+         \EndIf
+      \EndFor
+   \EndFor
+   \If{any element of X = false}
+      \State \emph{\textbf{return}} NO
+   \EndIf
+   \State \textbf{return} YES
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}\\
+Note that $m$ is the number of sets in $S$, and there are at most $n$ of them.  The size of each set is obviously at most
+$n$.  So the for-loop on line 4 executes $n$ times.  The inner for-loop on line 5 executes at most $k$ times (which is at
+most $n$).  The check for membership on line 6 is also at most $n$.  All other work in this algorithm is dominated by lines 4-7, so the overall running time is $O(n^3)$, which is polynomial.  Thus:  SUBSET-COVER(D) $\in$ NP.\\
+
+\textit{Step 2:}
+It is known that the vertex-cover decision problem (VC(D)) is $NP$-complete. Input to VC(D) is the graph $G(V,E)$,
+and the value $k$. We define our simple reduction procedure, $R$, from VC(D) to SUBSET-COVER(D) as follows:
+\begin{itemize}
+\item the vertices of $G$ will be the elements of $E$
+\item For each edge $e=(u,v) \in G.E$, create a new subset $S_i = \{u, v\}$ and add it to $S$. (The value of the index doesn't matter)
+\item the $k$ value remains the same for both problems
+\end{itemize}
+Clearly this takes only polynomial time to translate the inputs.  Now it remains to show that - under this translation - 
+there is a vertex-cover of size $\leq k$ for VC(D) $\iff$ there is a subset-cover of of size $\leq k$ 
+for SUBSET-COVER(D).\\
+
+$\Longrightarrow$ Suppose there is a vertex-cover of size $k$ for VC(D).  Under $R$, every set $S_i \in S$ we create
+will have at least one element $e_v$ corresponding to $v$ from that vertex-cover, because there is one set in $S$ for every edge in $G.E$, and the vertex-cover will "touch" every edge at least once (by definition).   Thus, the set $A$ of only those elements corresponding to vertices of the vertex-cover constitutes a subset-cover of size $k$ for SUBSET-COVER(D).\\
+
+$\Longleftarrow$ Suppose there is a subset-cover $A$ of size $k$ for SUBSET-COVER(D).  Every set $S_i \in S$ must 
+correspond to an edge in $G.E$.  Every element $e \in A$ must be correspond to a vertex in $G.V$.  So, if $A$ contains at 
+least one element from every set, then the vertices corresponding to those elements must "touch" every edge in $G.E$ 
+at least once.  Thus, $G$ must have had a vertex-cover of size $k$.\\
+
+Now we may conclude that SUBSET-COVER(D) $\in NPC$. $\blacksquare$\\
+
+\newpage
+
+\emph{\textbf{Problem 4 Statement.}} A paper mill manufactures rolls of paper of standard width 3 meters.  Customers
+watn to buy paper rolls of shorter width, and the mill has to cut such rolls from the 3m rolls.  For example, one 3m roll
+can be cut into 2 rolls of width 93cm and one roll of width 108 cm; the remaining 6cm goes to waste.  The mill receives 
+an order of
+\begin{itemize}
+\item 97 rolls of width 135 cm
+\item 610 rolls of width 108 cm
+\item 395 rolls of width 93 cm
+\item 211 rolls of width 42 cm
+\end{itemize}
+Form a linear program to compute the smallest number of 3m rolls that have to be cut to satisfy this order, and explain
+how they should be cut.\\
+
+\emph{\textbf{Problem 4 Solution.}} Let us define some terms for clarity:
+\begin{itemize}
+\item Let $c_0 = 135$, $c_1 = 108$, $c_2 = 93$, and $c_3 = 42$.  These are our \emph{\textbf{cut-types}}.
+\item Let $x_i$ represent the total number of 3m rolls which we will cut by cut-method $i$ (defined later).
+\item Let $A$ be our coefficient matrix, where $a_{ij} = \text{\# of cuts of type } j \text{ for cut-method } i$ (for a single roll)
+\item Let $k_0 = 97$, $k_1 = 610$, $k_2 = 395$, and $k_3 = 211$.  These are the number of resized rolls ordered by each of the 4 customers.
+\end{itemize}
+Calculating the coefficients of $A$ is a straightforward (albeit tedious) process. What we did to achieve this was as follows:
+\begin{itemize}
+\item List all the possible combinations of each of the cut-types.  Since there are 4 types, there are $2^4 - 1 = 15$ situations to examine.
+\item Each such combination will be of the bounded form $a_0c_0 + a_1c_1 + a_2c_2 + a_3c_3 \leq 300$.  
+\item We are considering unique types of combinations or \emph{\textbf{cut-methods}}, i.e. one such method says "we are cutting this 300cm roll into $a_0$ 135-cm pieces, and $a_3$ 42-cm pieces.  As they are unique, writing out a binary-counting-decimal matrix was helpful in keeping track of what combinations were left to be calculated.
+\item We solved for the $a_i$ of each cut-method by minimizing the wasted material (300 - sum), and enforcing that each coefficient take on an integer value $>$ 0.  It had to be greater than zero because otherwise it devolved into a different cut-method.  
+\item In certain cases, there were more than one set of non-zero integer solutions.  In the case that only one a-value changed from set to set, we just took the set with the largest varying value.  However in the case where multiple a-values change from set to set, we added a new row to $A$ with those constants, because such a set could potentially be used for a more optimal solution during SIMPLEX.
+\end{itemize}
+Here is the matrix we calculated:
+\[
+\begin{bmatrix}
+	2 & 0 & 0 & 0 \\
+	0 & 2 & 0 & 0 \\
+	0 & 0 & 3 & 0 \\
+	0 & 0 & 0 & 7 \\
+	1 & 0 & 1 & 0 \\
+	0 & 1 & 2 & 0 \\
+	1 & 1 & 0 & 0 \\
+	1 & 0 & 0 & 3 \\
+	0 & 1 & 0 & 4 \\
+	0 & 2 & 0 & 2 \\
+	0 & 0 & 1 & 4 \\
+	0 & 0 & 2 & 2 \\
+	1 & 1 & 0 & 1 \\
+	1 & 0 & 1 & 1 \\
+	0 & 1 & 1 & 2
+\end{bmatrix}
+\]\\
+
+Note that there are 15 rows, thus we will have 15 variables $X_i$.  For example, $X_{14}$ represents the number of rolls
+on which we will make $1 \times 108$ cm cut, $1 \times 93$ cm cut, and $2 \times 42$ cm cuts.
+Now we may finally formulate our Linear Program:\\
+
+Objective: $$\text{Minimize } \sum\limits_{j=1}^n x_j$$\\
+
+Subject to:\\
+\begin{enumerate}[label=(\roman*)]
+\item $$A^T\vec{x} \geq \vec{k}$$
+\item $$\vec{x} \geq \vec{0}$$
+\end{enumerate}
+The first constraint just says "for each cut type $c_i$, enforce that we create at least $k_i$ such cuts." Note that by the first constraint we are allowing for the possibility of creating more cuts of a particular type than required.  This is necessary because requiring exact equivalence will very likely cause the LP to return "no solution."  
+
+\newpage
+
+\emph{\textbf{Problem 5 Statement.}} Formulate linear or integer programs for the following optimization problems.
+(Full-credit will be given to LP solutions, when they are possible.)
+\begin{enumerate}[label=(\alph*)]
+\item Min-cost flow:  Given a flow network with capacities $c_e$ and costs $a_e$ on every edge $e$, and supplies $s_i$
+on every vertex $i$, find a feasible flow $f: E \rightarrow R_+$ -- that is, a flow satisfying edge capacity constraints and node supplies -- that minimizes total cost of the flow.
+\item The assignment problem:  There are $n$ persons and $n$ objects that have to be matched on a one-to-one basis.
+There's a given set $A$ of ordered pairs $(i,j)$, where a pair $(i,j)$ indicates that person $i$ can be matched with object
+$j$.  For every pair $(i,j) \in A$, there's a value $a_{ij}$ for matching person $i$ with object $j$.  Our goal is to assign
+persons to objects so as to maximize the total value of the assignment.
+\item Uncapacitated facility location:  There is a sret $F$ of $m$ facilities and a set $D$ of $n$ clients.  For each facility
+$i \in F$ and each client $j \in D$, there is a cost $c_{ij}$ of assigning client $j$ to facility $i$.  Further, there is a one-time cost $f_i$ associated with opening and operating facility $i$.  Find a subset $F'$ of facilities to open that minimizes the total cost of (i) operating the facilities in $F'$ and (ii) assigning every client $j$ to one of the facilities in $F'$.
+\end{enumerate}
+
+\emph{\textbf{Problem 5 Solution.}}
+\begin{enumerate}[label=(\alph*)]
+\item \underline{Min-cost flow}: For this problem we can formulate a linear program.  Our variables are the amount of flow 
+$f_e$ on each edge.  Let $\vec{x}$ be an $1 \times m, m=|E|$ vector representing the flows.  Similarly, $\vec{a}$ is an 
+$1 \times m$ vector representing the edge costs, $\vec{c}$ a $1 \times m$ vector representing the capacities, and
+$\vec{s}$ an $1 \times n, n=|V|$ vector representing the supplies of the vertices.\\
+
+Objective: $$\text{Minimize } \vec{a}\vec{x}^T$$\\
+
+Subject To:\\
+\begin{enumerate}[label=(\roman*)]
+\item $$\sum\limits_{j: e_j \text{ out of } i}x_j  - \sum\limits_{j: e_j \text{ in to } i}x_j = s_i \text{  ,  } i = 1,2,...,n$$
+\item $$\sum\limits_{i \in V}\sum\limits_{j : e_j\text{ out of } i}x_j  -  \sum\limits_{i \in V}\sum\limits_{j : e_j\text{ in to } i}x_j = 0\text{  ,  } i = 1,2,...,n$$
+\item $$\vec{x} \leq \vec{c}$$
+\item $$\vec{x} \geq \vec{0}$$
+\end{enumerate}
+
+\item \underline{Assignment Problem}:  This problem too can be formulated as a linear program, but first we must transform
+the inputs a little bit - into a graph!  The set $A$ we will move directly to $G.E$.  The persons $i$ and objects $j$ will all be
+added to $G.V$ as individual vertices.  Now it should be apparent that we have a bipartite graph, because there will be no
+edge between any person nodes, and no edge between any object nodes -- only between person and object.  The weights of each edge will equal $-a_{ij}$, because we wish to maximize "cost" instead of minimize it. Furthermore, since the problem requires an exact one-to-one correspondence, this graph problem is now a "maximum bipartite matching" problem.\\
+
+Unfortunately, we're not done yet!  We will translate the problem into Min-cost-flow, for which we already formulated an LP
+in part (a).  To do so we simply (1) add the source and sink nodes $s$ and $t$ to $G.V$; (2) for every person node $i$ add the zero-cost-edge $(s,i)$ to $G.E$, and for every object node $j$ add the zero-cost-edge $(j,t)$ to $G.E$; (3) let the capacity of every edge $c_e$ in the graph be 1; (4) let all supplies $s_i=0$, $s_j=0$ except $s_s=n$ and $s_t=-n$.
+When this new input is solved for min-cost-flow, we can take the person-object edges selected by that flow as our maximum value assignment. \\
+
+\item \underline{Uncapacitated facility location}:  For this one we are stuck with an ($NP$-complete) integer program formulation.  We'll use $m \times n$ indicator variables: 
+\[
+x_{ij} =
+\begin{cases}
+			1 & \text{ if client $j$ is assigned to facility $i$} \\
+			0 & \text{ otherwise}
+\end{cases}
+\]
+If we define cost as "cost of opening facilities" + "cost of assigning customers" then we can define our integer program as follows:\\
+
+Objective: $$\text{Minimize: } \sum\limits_{i=1}^m f_i * \max_{1 \leq j < n} x_{ij} + \sum\limits_{i=1}^m\sum\limits_{j=1}^n x_{ij}*c_{ij}$$\\
+
+Subject To:\\
+\begin{enumerate}[label=(\roman*)]
+\item $$\sum\limits_{i=1}^m x_{ij} = 1 \text{ for } j=1,2,...,n$$
+\item $$x_{ij} \in \{0,1\}$$
+\end{enumerate}
+Note that the quantity $\max_{1 \leq j < n} x_{ij} \in \{0,1\}$ because though a facility may have multiple customers assigned
+to it, it is only every opened once!
+
+\end{enumerate}
+
+
+
+
+
+
+
+
+
+
+
+
+
+\end{document}
