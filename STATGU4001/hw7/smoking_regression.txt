@@ -9,6 +9,6 @@ SS_R = 75.4479129392
 Linear model Y = A + Bx, with A= 7.03748757353  and B= 0.00487340794602
 Null Hypotheseis: cigarette consumption does not affect death-rate
 --> T_obs =  3.7547115349
---> T_crit =  1.83311293265
---> P_value =  0.997739144166
+--> T_crit =  2.26215716274
+--> P_value =  0.00452171166739
  -- Reject the Null -- 

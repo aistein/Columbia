@@ -24,8 +24,8 @@ SS_R = (S_xx * S_YY - S_xY**2) / S_xx
 R_sq = 1 - SS_R / S_YY
 r = S_xY / (np.sqrt(S_xx * S_YY))
 T_obs = np.sqrt((n-2)*S_xx/SS_R)*np.abs(B)
-T_crit = t.ppf(1-0.05, n-2)
-p_value = t.cdf(T_obs, n-2)
+T_crit = t.ppf(1-0.025, n-2)
+p_value = 2*(1 - t.cdf(T_obs, n-2))
 
 print("x_hat =", x_hat)
 print("s_x =", s_x)

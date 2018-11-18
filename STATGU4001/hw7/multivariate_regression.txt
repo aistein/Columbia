@@ -1,2 +1,13 @@
-H0: When weight is known, Age doesn't affect blood pressure --> p-value =  0.546191047648
-H0: Age doesn't affect blood pressure --> p-value =  0.544948334362
+H0: When weight is known, Age doesn't affect blood pressure --> p-value =  0.782110259195
+--> T_obs =  [[ 0.2892695]]
+--> T_crit =  2.44691184879
+--Cannot Reject H0 at 5%--
+H0: Age doesn't affect blood pressure --> p-value =  0.739366397932
+--> T_obs =  [[ 0.35174727]]
+--> T_crit =  2.57058183661
+--Cannot Reject H0 at 5%--
+---THE O.G. Method--
+H0: Age doesn't affect blood pressure --> p-value =  [ 0.74944448]
+--> T_obs =  [ 0.33222712]
+--> T_crit =  2.36462425101
+--Cannot Reject H0 at 5%--

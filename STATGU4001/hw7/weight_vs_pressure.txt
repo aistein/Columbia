@@ -10,8 +10,8 @@ Linear model Y = A + Bx, with A= 70.531023831  and B= 0.405666168332
 
 Null Hypotheseis: weight does not affect systolic blood pressure
 --> T_obs =  4.11450705689
---> T_crit =  1.73406360662
---> P_value =  0.999674563532
+--> T_crit =  2.10092204024
+--> P_value =  0.000650872936691
  -- Reject the Null -- 
 
 We are 95% confident that for a sample of a large number of 182lb males
