@@ -4,21 +4,41 @@
 # - parse a single VP CSV file
 # - filter out paths > 8 hops,
 # - map the destination IP to (asn,bgp-prefix) pair
+# - find the VP with the minimum distance to each destination AS
+# usage:
+# - ./revtr_preprocessing.py <username:password>
 
+# for data parsing
 import pyasn
 import threading
 import datetime
 import time
+import json
+import wget
 import os
 import sys
 import csv
+
+# for file download, etc.
+import re, pycurl
+from io import BytesIO
+from bs4 import BeautifulSoup
+
+#==========================================================
+# BGP Processing Functions
+#==========================================================
+
+# username and password for cget is passed via command-line
+try:
+    userpwd = sys.argv[1]
+except IndexError:
+    raise ValueError('error: please enter username:password.')
 
 # the BGP-dump and destinfo dict must be global
 # - these will be accessed concurrently by multiple threads
 tag = datetime.datetime.now().strftime('%Y-%m-%d')
 bgpdumpfile = 'bgpdumps/'+tag+'.dat'
 asndb = pyasn.pyasn(bgpdumpfile)
-destinfo = {}
 
 # _numhops
 # returns either the number of hops this ping takes to reach dst, or 10 if never
@@ -36,7 +56,7 @@ def _numhops(ping):
 # query the BGP-dump database with IP, and store value in destinfo[] dict
 # no locking is needed! Python's core data structures are all thread-safe
 # https://docs.python.org/3/glossary.html#term-global-interpreter-lock
-def _lookuptask(ip):
+def _lookuptask(ip, destinfo):
     try:
         destinfo[ip] = asndb.lookup(ip)
     except:
@@ -45,8 +65,8 @@ def _lookuptask(ip):
 # _asninfo
 # spin off a _lookuptask(ip) thread
 # returns tuple(thread-handle, ip-address)
-def _asninfo(ip):
-    t = threading.Thread(target=_lookuptask(ip), name=ip)
+def _asninfo(ip, destinfo):
+    t = threading.Thread(target=_lookuptask(ip,destinfo), name=ip)
     t.start()
     return (t, ip)
 
@@ -54,7 +74,8 @@ def _asninfo(ip):
 # Remove pings from the input CSV file for which the destination is never reached
 # Yields tuple(number-of-hops, ip-address)
 # Adapted from StackOverflow post: https://stackoverflow.com/a/17444799/3341596
-def FilterAndCount(filename):
+def FilterAndCount(vp):
+    filename = cget(vp+'.csv')
     with open(filename, "r") as csvfile:
         datareader = csv.reader(csvfile)
         # remove the header line
@@ -62,19 +83,25 @@ def FilterAndCount(filename):
         # filter and count
         yield from map(lambda ping: (_numhops(ping), ping[0]),
             filter(lambda ping: _numhops(ping) < 9, datareader))
-        return
+
+    # these files are large, don't want to keep them around!
+    os.remove(filename)
+    return
 
 # MapPrefixes ...
 # Take filtered output (numhops, ipaddr) tuples and collect their asn info
-def MapPrefixes(filename):
-    cnts = FilterAndCount(filename)
-    yield from map(lambda tup: (tup[0], _asninfo(tup[1])), cnts)
+def MapPrefixes(vp,destinfo):
+    cnts = FilterAndCount(vp)
+    yield from map(lambda tup: (tup[0], _asninfo(tup[1],destinfo)), cnts)
     return
-    
+
+# FindMins ...
+# Record the minimum distance to asn/prefix per VP
 min_dist_per_asn = {}
 min_dist_per_prefix = {}
 def FindMins(vp):
-    for entry in MapPrefixes('vps/'+vp):
+    destinfo = {}
+    for entry in MapPrefixes(vp, destinfo):
         # parse apart the returned entry
         hops = entry[0]         # number of hops to dest
         thread = entry[1][0]    # thread handle
@@ -84,31 +111,105 @@ def FindMins(vp):
         thread.join()
 
         # gather the output
-        dinfo = destinfo[dest]
-        asn = str(dinfo[0])     # ASN number
-        prefix = str(dinfo[1])  # BGP prefix
+        if dest in destinfo:
+            dinfo = destinfo[dest]
+            asn = str(dinfo[0])     # ASN number
+            prefix = str(dinfo[1])  # BGP prefix
+        else:
+            continue
 
-        # collect the mins
+        # collect the mins by ASN and Prefix
         if asn == None or prefix == None:
             continue
-        try:
-            if hops < min_dist_per_asn[asn][0]:
-                min_dist_per_asn[asn] = (hops,vp)
-        except KeyError:
-            min_dist_per_asn[asn] = (hops,vp)
-        try:
-            if hops < min_dist_per_prefix[prefix][0]:
-                min_dist_per_prefix[prefix] = (hops,vp)
-        except KeyError:
-            min_dist_per_prefix[prefix] = (hops,vp)
+
+        if asn in min_dist_per_asn:
+            if vp in min_dist_per_asn[asn]:
+                if hops < int(min_dist_per_asn[asn][vp]):
+                    min_dist_per_asn[asn][vp] = str(hops)
+            else:
+                min_dist_per_asn[asn][vp] = str(hops)
+        else:
+            min_dist_per_asn[asn] = {vp:str(hops)}
+
+        if prefix in min_dist_per_prefix:
+            if vp in min_dist_per_prefix[prefix]:
+                if hops < int(min_dist_per_prefix[prefix][vp]):
+                    min_dist_per_prefix[prefix][vp] = str(hops)
+            else:
+                min_dist_per_prefix[prefix][vp] = str(hops)
+        else:
+            min_dist_per_prefix[prefix] = {vp:str(hops)}
+
     return
+
+#==========================================================
+# File Processing Functions
+#==========================================================
+
+rooturl = "http://bgoodc.cs.columbia.edu/rr/measurements_2017/"
+
+# cget
+# the python wget package has no options, so using curl instead
+def cget(extension):
+    filename = 'vps/data_'+extension
+    with open(filename, 'wb') as f:
+        url = rooturl + extension
+        c = pycurl.Curl()
+        c.setopt(c.URL, url)
+        c.setopt(c.USERPWD, userpwd)
+        c.setopt(c.WRITEDATA, f)
+        c.perform()
+        c.close()
+    return filename
+
+#==========================================================
+# Main
+#==========================================================
 
 def main():
     start = time.time()
-    for vp in os.listdir('vps/'):
-        FindMins(vp)
-    for asn, pair in sorted(min_dist_per_asn.items(), key=lambda k: k[1]):
-        print("ASN: {: <6}, min_dist: {:d}, vp: {: <30}".format(asn, pair[0], pair[1]))
+
+    # get and process the list of vp-csv files
+    vplist = set()
+    vplisthtml = cget("")
+    soup = BeautifulSoup(open(vplisthtml,'r'),'html.parser')
+    num_to_read = 139 # only here while I write the scripts
+    for hit in soup.find_all('a'):
+        match = re.match(r'^.*csv', hit['href'])
+        if match and num_to_read > 0:
+            vplist.add(match[0])
+            num_to_read = num_to_read - 1
+
+    # done extracting, remove the vp-html-file
+    os.remove(vplisthtml)
+
+    # for vp in os.listdir('vps/'): # lists only filenames
+    for vpcsv in vplist:
+        FindMins(os.path.splitext(vpcsv)[0]) # removes the ".csv"
+        print("Processed " + vpcsv + "...")
+
+    # sort and store minimums by ASN
+    with open('mappings/min_by_asn.json', 'w') as asnfile:
+        dump = {}
+        for asn, rankings in min_dist_per_asn.items():
+            dump[asn] = []
+            dump[asn].append({
+                'rankings': rankings
+            })
+        # dump json mappings out to asnfile     
+        json.dump(dump, asnfile)
+
+    # sort and store minimums by Prefix
+    with open('mappings/min_by_prefix.json', 'w') as prefixfile:
+        dump = {}
+        for prefix, rankings in min_dist_per_prefix.items():
+            dump[prefix] = []
+            dump[prefix].append({
+                'rankings': rankings
+            })
+        # dump json mappings out to dumpfile      
+        json.dump(dump, prefixfile)
+
     end = time.time()
     print("time elapsed: {}".format(end-start)) 
     
