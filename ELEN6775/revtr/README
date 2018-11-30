@@ -1,4 +1,4 @@
-What is this project all about?
+*** What is this project all about? ***
 
 Primary Goal
 * Make the reverse traceroute system better by minimizing the number of RR-pings required,
@@ -42,5 +42,35 @@ VP Ranking Methods
         - the given prefix, or the first hop after entering the prefix -- as long as the choice is consistent.
         - Now just deliver a ranking based on the number of hops away from an ingress that a VP sits.  If several
         - VPs enter the network via the same ingress, just keep the one with the smallest hop-count, and discard
-        - the rest.
+        - the rest.  This is okay because Internet routing is destination-based: any distinct routes from S to D 
+        - going through some common router R will likely be exactly the same from R to D.  
     + Benefits:
+        - 1) This approach does have a "terminating condition" in that many VPs from the original set S will be
+        -    eliminated from the delivered list of rankings. This contributes towards the overall goal of minimizing
+        -    the number of probes sent overall during the RTR process.
+        - 2) The distance from VP to ingress is taken into account for these rankings. This effectively maximizes
+        -    the amount of information we are likely to receive from a successful RR-ping when using top-ranked VPs.
+    + Drawbacks:
+        - ???
+
+Evaluation
+* We will use existing measurements from 2011 in conjunction with BGP-dumps from the same time period to evaluate the
+* efficacy of each of the three aforementioned methods.  For each BGP-routable prefix for which the VPs in this
+* dataset have RR-reachable measurements, the measurements will be split into test and training data.  The training
+* set is used to create VP rankings via each of the three approaches.  The test set will be used to emulate actual
+* RR-pings to never-before-seen destinations.  In the process of emulation for each method we can record metrics:
+*  - NumProbes:   the number of probes we had to send before receiving a successful stamping
+*  - NumHops:     the number of hops it takes to reach the destination on a successful probe
+*  - VPChosen:    ???
+*  - AltVPExists: ???
+* With these metrics in hand, we'll be able to make a first-order judgement about the relative effectiveness of each 
+* ranking method.  Results will include: 
+*  - CDF showing the fraction of RR-reachable test-destinations for which k probes were required to receive a stamp;
+*    legend: ranking methods
+*  - CDF showing the fraction of RR-reachable test-destinations for which the destination was reached within k hops;
+*    legend: ranking methods
+*  - ...
+
+Challenges
+*) Large datasets can take a long time to process, so writing efficient fast code was an important consideration
+*) ...
