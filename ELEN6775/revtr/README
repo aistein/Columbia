@@ -1,0 +1,46 @@
+What is this project all about?
+
+Primary Goal
+* Make the reverse traceroute system better by minimizing the number of RR-pings required,
+* and by maximizing the amount of information we get from each one.
+
+Why Rank VPs?
+* First of all, to do reverse traceroute, we need to find VPs that are RR-reachable
+* i.e. there are empty slots in the RR header by the time that the VP->Dst ping reaches
+* Dst.  Second of all, we do not want to issue so many RR-pings into a network that
+* rate-limiting is triggered.  Third of all, it would be great if the VPs chosen were
+* as close as possible to the destination, so as to maximize the number of free slots
+* in the RR header. 
+
+VP Ranking Methods
+* 1) Destination Cover
+    + Overview:
+        - Say we have a new destination with prefix 'P'.  Given a set 'S' of VPs for which we 
+        - already have some RR-reachable measurements to other destinations within P, rank 
+        - each VP 'v' in S in terms of how many such destinations it reaches. This is a greedy
+        - set-covering approximation algorithm which just picks the "set" v that has the largest
+        - number of RR-reachable destinations in P.
+    + Drawbacks:
+        - 1) It has no "terminating condition"; i.e. just because it supplies us with a rank-ordering
+        -    of VPs, we may still have to issue probes from each VP moving down the list towards our
+        -    new target destination. This could end up having us send pings from every single VP in S!
+        - 2) It does not take into account the number of hops away from the destination a VP sits.
+        -    By extension, it does not maximize the amount of information we can get back from an RR-ping.
+* 2) Top-K / Restricted Set
+    + Overview:
+        - A small number of M-Lab sites can to a large majority of RR-reachable destinations. As shown
+        - in Brian's paper, using just the top 10 M-Lab sites reached 95% of RR-reachable destinations
+        - , within the same number of hops, as reached by the full set of M-Lab + PlanetLab nodes.
+        - In light of this, restricting the set of VPs to just the top-K can give most of the results,
+        - while greatly reducing the amount of probing required.
+    + Drawbacks:
+        - ???
+* 3) Ingress-Based
+    + Overview:
+        - Define some notion of "network" -- we choose BGP-routable prefix in our work -- and find for each
+        - RR-pingable measurement the point of "ingress."  That could be either the last hop before entering
+        - the given prefix, or the first hop after entering the prefix -- as long as the choice is consistent.
+        - Now just deliver a ranking based on the number of hops away from an ingress that a VP sits.  If several
+        - VPs enter the network via the same ingress, just keep the one with the smallest hop-count, and discard
+        - the rest.
+    + Benefits:

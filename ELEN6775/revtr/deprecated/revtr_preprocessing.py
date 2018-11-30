@@ -1,12 +1,15 @@
 #!/Users/alexstein/anaconda3/bin/python
 
 # revtr_preprocessing.py
-# - parse a single VP CSV file
-# - filter out paths > 8 hops,
+# - parse all VP CSV files, one-by-one from the online source
+# - filter out paths > 9 hops
 # - map the destination IP to (asn,bgp-prefix) pair
-# - find the VP with the minimum distance to each destination AS
+# - find the minimum distance per-VP to each destination AS/prefix
 # usage:
 # - ./revtr_preprocessing.py <username:password>
+# note:
+# - be sure to update the BGP datadump before running this script
+# - to do so, run ./scripts/refresh
 
 # for data parsing
 import pyasn
@@ -72,7 +75,7 @@ def _asninfo(ip, destinfo):
 
 # FilterAndCount ...
 # Remove pings from the input CSV file for which the destination is never reached
-# Yields tuple(number-of-hops, ip-address)
+# Yields tuple(number-of-hops, ip-address, [ping])
 # Adapted from StackOverflow post: https://stackoverflow.com/a/17444799/3341596
 def FilterAndCount(vp):
     filename = cget(vp+'.csv')
@@ -81,22 +84,24 @@ def FilterAndCount(vp):
         # remove the header line
         next(datareader)
         # filter and count
-        yield from map(lambda ping: (_numhops(ping), ping[0]),
-            filter(lambda ping: _numhops(ping) < 9, datareader))
+        yield from map(lambda ping: (_numhops(ping), ping[0], ping),
+            filter(lambda ping: _numhops(ping) <= 9, datareader))
 
     # these files are large, don't want to keep them around!
     os.remove(filename)
     return
 
 # MapPrefixes ...
-# Take filtered output (numhops, ipaddr) tuples and collect their asn info
+# Take filtered output (numhops, ipaddr, [ping]) tuples and collect their asn info
 def MapPrefixes(vp,destinfo):
     cnts = FilterAndCount(vp)
-    yield from map(lambda tup: (tup[0], _asninfo(tup[1],destinfo)), cnts)
+    # tup[0] = numhops, tup[1] = destination IP address, tup[2] = the full measurement
+    # the below line will yeild a 3-tuple (hops, IP, [ping])
+    yield from map(lambda tup: (tup[0], _asninfo(tup[1],destinfo), tup[2]), cnts)
     return
 
 # FindMins ...
-# Record the minimum distance to asn/prefix per VP
+# Record the minimum distance to asn/prefix per VP; keep the [ping] measurement around
 min_dist_per_asn = {}
 min_dist_per_prefix = {}
 def FindMins(vp):
@@ -106,8 +111,9 @@ def FindMins(vp):
         hops = entry[0]         # number of hops to dest
         thread = entry[1][0]    # thread handle
         dest = entry[1][1]      # destination ip-address
+        measurement = entry[2]  # ping measurement
 
-        # wait for the generated thread to finish
+        # wait for the generated (updating destinfo) thread to finish
         thread.join()
 
         # gather the output
@@ -124,21 +130,21 @@ def FindMins(vp):
 
         if asn in min_dist_per_asn:
             if vp in min_dist_per_asn[asn]:
-                if hops < int(min_dist_per_asn[asn][vp]):
-                    min_dist_per_asn[asn][vp] = str(hops)
+                if hops < int(min_dist_per_asn[asn][vp][0]):
+                    min_dist_per_asn[asn][vp] = (str(hops), measurement)
             else:
-                min_dist_per_asn[asn][vp] = str(hops)
+                min_dist_per_asn[asn][vp] = (str(hops), measurement)
         else:
-            min_dist_per_asn[asn] = {vp:str(hops)}
+            min_dist_per_asn[asn] = {vp:(str(hops), measurement)}
 
         if prefix in min_dist_per_prefix:
             if vp in min_dist_per_prefix[prefix]:
-                if hops < int(min_dist_per_prefix[prefix][vp]):
-                    min_dist_per_prefix[prefix][vp] = str(hops)
+                if hops < int(min_dist_per_prefix[prefix][vp][0]):
+                    min_dist_per_prefix[prefix][vp] = (str(hops), measurement)
             else:
-                min_dist_per_prefix[prefix][vp] = str(hops)
+                min_dist_per_prefix[prefix][vp] = (str(hops), measurement)
         else:
-            min_dist_per_prefix[prefix] = {vp:str(hops)}
+            min_dist_per_prefix[prefix] = {vp:(str(hops), measurement)}
 
     return
 
@@ -146,7 +152,7 @@ def FindMins(vp):
 # File Processing Functions
 #==========================================================
 
-rooturl = "http://bgoodc.cs.columbia.edu/rr/measurements_2017/"
+rooturl = "http://bgoodc.cs.columbia.edu/old_rr_data/"
 
 # cget
 # the python wget package has no options, so using curl instead
@@ -173,7 +179,8 @@ def main():
     vplist = set()
     vplisthtml = cget("")
     soup = BeautifulSoup(open(vplisthtml,'r'),'html.parser')
-    num_to_read = 139 # only here while I write the scripts
+    # num_to_read = 139 # only here while I write the scripts
+    num_to_read = 5
     for hit in soup.find_all('a'):
         match = re.match(r'^.*csv', hit['href'])
         if match and num_to_read > 0:
@@ -183,7 +190,6 @@ def main():
     # done extracting, remove the vp-html-file
     os.remove(vplisthtml)
 
-    # for vp in os.listdir('vps/'): # lists only filenames
     for vpcsv in vplist:
         FindMins(os.path.splitext(vpcsv)[0]) # removes the ".csv"
         print("Processed " + vpcsv + "...")

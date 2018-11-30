@@ -2,4 +2,6 @@ logs/
 vps/
 bgpdumps/
 mappings/
-credentials
+test/
+train/
+credentials.json
