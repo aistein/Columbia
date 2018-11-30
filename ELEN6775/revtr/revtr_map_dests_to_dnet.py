@@ -5,11 +5,18 @@
 # - filter out paths > 9 hops
 # - write out a JSON file that maps each destination to its BGP-prefix
 # - PURPOSE: the above file will be used to split data into test and training sets
-# usage:
-# - ./revtr_map_dests_to_dnet.py <username:password>
+# usage: (remote)
+# - ./revtr_map_dests_to_dnet.py
+# usage: (server)
+# - ./revtr_map_dests_to_dnet.py <fullpath to BGP dump> <fullpath to VP directory>
 # note:
 # - be sure to update the BGP datadump before running this script
 # - to do so, run ./scripts/refresh
+
+# SERVER ...
+# runtime flag indicating whether this script is being run from a local machine or directly
+# from the server where VP measurement files reside.
+SERVER = True
 
 # for data parsing
 import pyasn
@@ -28,24 +35,41 @@ import re, pycurl
 from io import BytesIO
 from bs4 import BeautifulSoup
 
-# username and password for cget is passed via credentials.json file
-try:
-    credfile = "./credentials.json"
-    with open(credfile, 'r') as jsonfile:
-        json_data = json.load(jsonfile)
-        userpwd = json_data["username"]+":"+json_data["password"]
-except (FileNotFoundError,IndexError):
-    raise ValueError('error: no/incorrect credentials.json file found.')
+# process external inputs
+if SERVER: # SERVER mode
+
+    # get the BGP-dumpfile path and the VP measurement directory path from CLI
+    try:
+        bgpdumpfile = sys.argv[1]
+        vpdir = sys.argv[2]
+    except IndexError:
+        raise ValueError('error: please enter <path to BGP-dump> <path to vpfiles dir>')
+
+else: # REMOTE mode
+
+    # tag = datetime.datetime.now().strftime('%Y-%m-%d')
+    # TODO: toggle comments of the lines above and below to switch between 2011 and latest BGP-dumps
+    tag = "2018-11-29" # day of BGP data from when the original measurements were collected
+    bgpdumpfile = 'bgpdumps/'+tag+'.dat'
+
+    # directory where VP files will be stored
+    vpdir = "./vps"
+
+    # username and password for cget is passed via credentials.json file
+    try:
+        credfile = "./credentials.json"
+        with open(credfile, 'r') as jsonfile:
+            json_data = json.load(jsonfile)
+            userpwd = json_data["username"]+":"+json_data["password"]
+    except (FileNotFoundError,IndexError):
+        raise ValueError('error: no/incorrect credentials.json file found.')
+
 
 #==========================================================
 # BGP Processing Functions
 #==========================================================
-
-# the BGP-dump and destinfo dict must be global
-# - these will be accessed concurrently by multiple threads
-# tag = datetime.datetime.now().strftime('%Y-%m-%d')
-tag = "2018-11-29" # day of BGP data from when the original measurements were collected
-bgpdumpfile = 'bgpdumps/'+tag+'.dat'
+# the BGP-dump DB must be global
+# - it will be accessed concurrently by multiple threads   
 asndb = pyasn.pyasn(bgpdumpfile)
 
 # _numhops
@@ -83,8 +107,8 @@ def _prefixinfo(ip, destinfo):
 # Yields ip-address
 # Adapted from StackOverflow post: https://stackoverflow.com/a/17444799/3341596
 def FilterAndCount(vp):
-    if os.path.isfile("./vps" + vp + ".csv"):
-        filename = "./vps" + vp + ".csv"
+    if SERVER or os.path.isfile(vpdir + '/' + vp + ".csv"):
+        filename = vpdir + '/' + vp + ".csv"
     else:
         filename = cget(vp+'.csv')
     with open(filename, "r") as csvfile:
@@ -133,7 +157,7 @@ def GroupByPrefix(vp):
         if prefix == str(None) or asn == str(None):
             continue
         
-        print("From VP:{}, mapping dest:{} to prefix {}.\n", vp, dest, prefix)
+        print("From VP:{}, mapping dest:{} to prefix {}.".format(vp, dest, prefix))
 
         # if the DB lookup succeeded, add "dest" to the map under "prefix"
         dest_by_prefix[prefix].add(dest)
@@ -141,24 +165,37 @@ def GroupByPrefix(vp):
     return
 
 #==========================================================
-# File Processing Functions
+# File/Dir Processing Functions
 #==========================================================
 
 rooturl = "http://bgoodc.cs.columbia.edu/old_rr_data/"
 
 # cget
 # the python wget package has no options, so using curl instead
-def cget(extension):
-    filename = 'vps/data_'+extension
-    with open(filename, 'wb') as f:
-        url = rooturl + extension
-        c = pycurl.Curl()
-        c.setopt(c.URL, url)
-        c.setopt(c.USERPWD, userpwd)
-        c.setopt(c.WRITEDATA, f)
-        c.perform()
-        c.close()
-    return filename
+if not SERVER:
+    def cget(extension):
+        filename = vpdir + '/data_' + extension
+        with open(filename, 'wb') as f:
+            url = rooturl + extension
+            c = pycurl.Curl()
+            c.setopt(c.URL, url)
+            c.setopt(c.USERPWD, userpwd)
+            c.setopt(c.WRITEDATA, f)
+            c.perform()
+            c.close()
+        return filename
+
+# SetupDirs ...
+# Ensures that the directories we need are correctly set up
+def SetupDirs():
+    if not os.path.exists('./mappings'):
+        os.makedirs('./mappings')
+    if not os.path.exists('./vps'):
+        os.makedirs('./vps')
+    if not os.path.exists('./test/vp_measurements'):
+        os.makedirs('./test/vp_measurements')
+    if not os.path.exists('./train/vp_measurements'):
+        os.makedirs('./train/vp_measurements')
 
 #==========================================================
 # Main
@@ -167,20 +204,25 @@ def cget(extension):
 def main():
     start = time.time()
 
+    # setup the needed directory structure
+    SetupDirs()
+
     # get and process the list of vp-csv files
     vplist = set()
-    vplisthtml = cget("")
-    soup = BeautifulSoup(open(vplisthtml,'r'),'html.parser')
-    # num_to_read = 139 # only here while I write the scripts
-    num_to_read = 10
-    for hit in soup.find_all('a'):
-        match = re.match(r'^.*csv', hit['href'])
-        if match and num_to_read > 0:
-            vplist.add(match[0])
-            num_to_read = num_to_read - 1
-
-    # done extracting, remove the vp-html-file
-    os.remove(vplisthtml)
+    if SERVER: # SERVER mode
+        for vpfile in os.listdir(vpdir):
+            vplist.add(vpfile)
+    else: # REMOTE mode
+        vplisthtml = cget("")
+        soup = BeautifulSoup(open(vplisthtml,'r'),'html.parser')
+        num_to_read = 10 # TODO: only here while I write the scripts
+        for hit in soup.find_all('a'):
+            match = re.match(r'^.*csv', hit['href'])
+            if match and num_to_read > 0:
+                vplist.add(match[0])
+                num_to_read = num_to_read - 1
+        # done extracting, remove the vp-html-file
+        os.remove(vplisthtml)
 
     for vpcsv in vplist:
         GroupByPrefix(os.path.splitext(vpcsv)[0]) # removes the ".csv"
